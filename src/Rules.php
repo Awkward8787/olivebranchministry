@@ -85,6 +85,10 @@ final class Rules
             } catch (InvalidArgumentException $e) {
                 $errors['goods_value'] = $e->getMessage();
             }
+            if ($goodsValue !== null && $cents !== null && $cents > 0 && $goodsValue > $cents) {
+                $errors['goods_value'] = 'The good-faith estimate cannot be more than the gift.';
+                $goodsValue = null;
+            }
         }
 
         return [
@@ -499,7 +503,7 @@ final class Rules
      * @param array<string, string> $input
      * @return array{errors:array<string, string>, data:array<string, mixed>}
      */
-    public static function fund(array $input): array
+    public static function fund(array $input, ?string $previousOrg = null): array
     {
         $errors = [];
         $name = trim($input['name'] ?? '');
@@ -518,6 +522,14 @@ final class Rules
         if (!in_array($org, [GiftPolicy::CHURCH, GiftPolicy::UNCONFIRMED], true)) {
             $errors['receiving_org'] = 'Choose who receives this fund.';
         }
+        $storedOrg = $org === GiftPolicy::CHURCH ? GiftPolicy::CHURCH : GiftPolicy::UNCONFIRMED;
+        $reason = trim($input['reason'] ?? '');
+        $orgChanged = $previousOrg !== null && $previousOrg !== $storedOrg;
+        if ($orgChanged && $reason === '') {
+            $errors['reason'] = 'Enter a reason for changing who receives this fund.';
+        } elseif (strlen($reason) > 500) {
+            $errors['reason'] = 'Reason must be 500 characters or fewer.';
+        }
 
         return [
             'errors' => $errors,
@@ -525,7 +537,8 @@ final class Rules
                 'name' => $name,
                 'sort_order' => $sort,
                 'active' => $active,
-                'receiving_org' => $org === GiftPolicy::CHURCH ? GiftPolicy::CHURCH : GiftPolicy::UNCONFIRMED,
+                'receiving_org' => $storedOrg,
+                'reason' => $reason,
             ],
         ];
     }

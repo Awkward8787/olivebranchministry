@@ -229,8 +229,6 @@ final class GivingLedgerTest extends TestCase
         $to = Money::parseCents('1.00');
         $this->assertSame(50000, $from);
         $this->assertSame(100, $to);
-        $this->assertTrue(GiftPolicy::refusesInPlaceAmountChange('staff', $from, $to));
-        $this->assertTrue(GiftPolicy::refusesInPlaceAmountChange('admin', $from, $to));
         $net = GivingLedger::netCents($from, [
             ['kind' => 'adjustment', 'amount_cents' => -49900],
         ]);
@@ -279,10 +277,24 @@ final class GivingLedgerTest extends TestCase
         $this->assertTrue(GiftPolicy::yearClosedToStaff('2025-12-31', $feb1));
         $this->assertFalse(GiftPolicy::yearClosedToStaff('2026-06-01', $feb1));
         $this->assertTrue(GiftPolicy::yearClosedToStaff('2024-01-01', $jan31));
-        $this->assertTrue(GiftPolicy::canPostAdjustment('admin', '2024-01-01', $feb1));
-        $this->assertFalse(GiftPolicy::canPostAdjustment('staff', '2024-01-01', $feb1));
-        $this->assertTrue(GiftPolicy::canPostAdjustment('staff', '2025-06-01', $jan31));
-        $this->assertFalse(GiftPolicy::newGiftUsesActiveFund(false));
-        $this->assertTrue(GiftPolicy::newGiftUsesActiveFund(true));
+        $this->assertTrue(GiftPolicy::canWriteYear('admin', '2024-01-01', $feb1));
+        $this->assertFalse(GiftPolicy::canWriteYear('staff', '2024-01-01', $feb1));
+        $this->assertTrue(GiftPolicy::canWriteYear('staff', '2025-06-01', $jan31));
+        $this->assertNull(GiftPolicy::closedYearMessage('staff', '2025-06-01', $jan31));
+    }
+
+    public function testStaffCannotRecordANewGiftInAClosedYear(): void
+    {
+        $zone = new DateTimeZone('America/New_York');
+        $october = new DateTimeImmutable('2026-10-25 12:00:00', $zone);
+        $this->assertFalse(GiftPolicy::canWriteYear('staff', '2025-06-01', $october));
+        $this->assertSame(
+            GiftPolicy::CLOSED_YEAR,
+            GiftPolicy::closedYearMessage('staff', '2025-06-01', $october),
+        );
+        $this->assertTrue(GiftPolicy::canWriteYear('admin', '2025-06-01', $october));
+        $this->assertNull(GiftPolicy::closedYearMessage('admin', '2025-06-01', $october));
+        $this->assertTrue(GiftPolicy::canWriteYear('staff', '2026-06-01', $october));
+        $this->assertNull(GiftPolicy::closedYearMessage('staff', '2026-06-01', $october));
     }
 }

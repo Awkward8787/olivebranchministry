@@ -6,6 +6,7 @@ namespace Obm\Tests;
 
 use Obm\HtmlCheck;
 use Obm\SchemaOrg;
+use Obm\Statements;
 use PHPUnit\Framework\TestCase;
 
 final class HtmlCheckTest extends TestCase
@@ -49,9 +50,10 @@ final class HtmlCheckTest extends TestCase
         $this->assertStringNotContainsString('community resource', $pages['hub']);
         $this->assertStringNotContainsString('around', $pages['hub']);
         $this->assertStringNotContainsString('41-5032500', $pages['statement']);
-        $this->assertStringContainsString('Intangible religious benefits', $pages['statement']);
+        $this->assertStringContainsString('intangible religious benefits', $pages['statement']);
         $this->assertStringNotContainsString('415032500', $pages['statement']);
-        $this->assertStringContainsString('No goods or services were provided in exchange for these contributions.', $pages['statement']);
+        $this->assertStringContainsString(Statements::NO_GOODS, $pages['statement']);
+        $this->assertStringNotContainsString('Intangible religious benefits were provided.', $pages['statement']);
         $this->assertStringNotContainsString('latitude', $pages['home']);
         $this->assertStringNotContainsString('"geo"', $pages['home']);
         $this->assertStringContainsString('DEMO DATA', $pages['dashboard']);

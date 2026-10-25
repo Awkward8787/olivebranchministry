@@ -317,25 +317,71 @@ final class Repository
     }
 
     /** @param array<string, mixed> $data */
-    public function saveFund(array $data, ?int $id): int
+    public function saveFund(array $data, ?int $id, int $actorId, string $now): int
     {
         $org = ($data['receiving_org'] ?? GiftPolicy::CHURCH) === GiftPolicy::CHURCH
             ? GiftPolicy::CHURCH
             : GiftPolicy::UNCONFIRMED;
-        if ($id === null) {
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $this->pdo->beginTransaction();
+        try {
+            if ($id === null) {
+                $this->run(
+                    'INSERT INTO funds (name, sort_order, active, receiving_org) VALUES (:name, :sort_order, :active, :org)',
+                    [':name' => $data['name'], ':sort_order' => $data['sort_order'], ':active' => $data['active'], ':org' => $org],
+                );
+                $id = (int) $this->pdo->lastInsertId();
+                $this->writeFundAudit(
+                    $id,
+                    $actorId,
+                    'created',
+                    $reason !== '' ? $reason : 'Created',
+                    'receiving_org=' . $org,
+                    $now,
+                );
+                $this->pdo->commit();
+
+                return $id;
+            }
+            $current = $this->one('SELECT receiving_org FROM funds WHERE id = :id FOR UPDATE', [':id' => $id]);
+            if ($current === null) {
+                throw new \InvalidArgumentException('That fund is not recorded.');
+            }
+            $previous = (string) $current['receiving_org'] === GiftPolicy::CHURCH
+                ? GiftPolicy::CHURCH
+                : GiftPolicy::UNCONFIRMED;
+            if ($previous !== $org && $reason === '') {
+                throw new \InvalidArgumentException('Enter a reason for changing who receives this fund.');
+            }
             $this->run(
-                'INSERT INTO funds (name, sort_order, active, receiving_org) VALUES (:name, :sort_order, :active, :org)',
-                [':name' => $data['name'], ':sort_order' => $data['sort_order'], ':active' => $data['active'], ':org' => $org],
+                'UPDATE funds SET name = :name, sort_order = :sort_order, active = :active, receiving_org = :org WHERE id = :id',
+                [':name' => $data['name'], ':sort_order' => $data['sort_order'], ':active' => $data['active'], ':org' => $org, ':id' => $id],
             );
+            if ($previous !== $org) {
+                $this->writeFundAudit($id, $actorId, 'receiving_org', $reason, $previous . ' -> ' . $org, $now);
+            }
+            $this->pdo->commit();
 
-            return (int) $this->pdo->lastInsertId();
+            return $id;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
         }
-        $this->run(
-            'UPDATE funds SET name = :name, sort_order = :sort_order, active = :active, receiving_org = :org WHERE id = :id',
-            [':name' => $data['name'], ':sort_order' => $data['sort_order'], ':active' => $data['active'], ':org' => $org, ':id' => $id],
-        );
+    }
 
-        return $id;
+    /** @return list<array<string, mixed>> */
+    public function fundAudit(int $fundId): array
+    {
+        return $this->all(
+            'SELECT a.id, a.action, a.reason, a.detail, a.created_at, u.name AS actor_name
+             FROM fund_audit a
+             LEFT JOIN users u ON u.id = a.actor_id
+             WHERE a.fund_id = :id
+             ORDER BY a.id',
+            [':id' => $fundId],
+        );
     }
 
     /**
@@ -872,6 +918,22 @@ final class Repository
             'receiving_org' => $org === GiftPolicy::CHURCH ? GiftPolicy::CHURCH : GiftPolicy::UNCONFIRMED,
             'voided' => (int) $row['void_count'] > 0,
         ];
+    }
+
+    private function writeFundAudit(int $fundId, ?int $actorId, string $action, string $reason, string $detail, string $now): void
+    {
+        $this->run(
+            'INSERT INTO fund_audit (fund_id, actor_id, action, reason, detail, created_at)
+             VALUES (:fund_id, :actor_id, :action, :reason, :detail, :created_at)',
+            [
+                ':fund_id' => $fundId,
+                ':actor_id' => $actorId,
+                ':action' => $action,
+                ':reason' => $reason,
+                ':detail' => substr($detail, 0, 1000),
+                ':created_at' => $now,
+            ],
+        );
     }
 
     private function writeAudit(int $giftId, ?int $actorId, string $action, string $reason, string $detail, string $now): void

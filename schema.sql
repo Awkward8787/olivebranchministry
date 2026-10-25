@@ -116,8 +116,10 @@ CREATE TABLE funds (
     sort_order INT NOT NULL DEFAULT 0,
     active TINYINT(1) NOT NULL DEFAULT 1,
     receiving_org VARCHAR(20) NOT NULL DEFAULT 'church',
+    code VARCHAR(40) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_funds_name (name),
+    UNIQUE KEY uq_funds_code (code),
     CONSTRAINT chk_receiving_org CHECK (receiving_org IN ('church', 'unconfirmed'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -175,6 +177,20 @@ CREATE TABLE gift_audit (
     CONSTRAINT fk_audit_user FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE fund_audit (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    fund_id INT UNSIGNED NOT NULL,
+    actor_id INT UNSIGNED NULL,
+    action VARCHAR(40) NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    detail VARCHAR(1000) NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_fund_audit (fund_id, id),
+    CONSTRAINT fk_fund_audit_fund FOREIGN KEY (fund_id) REFERENCES funds (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_fund_audit_user FOREIGN KEY (actor_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE attendance (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     service_time_id INT UNSIGNED NULL,
@@ -204,9 +220,9 @@ INSERT INTO service_times (name, weekday, start_time, end_time, note, sort_order
     ('Evening Service', 0, '18:00:00', NULL, 'Fourth Sunday', 40, 1, 0),
     ('Prayer & Fasting', 6, '10:00:00', '12:00:00', NULL, 50, 1, 1);
 
-INSERT INTO funds (name, sort_order, active, receiving_org) VALUES
-    ('General', 10, 1, 'church'),
-    ('Tithes', 20, 1, 'church'),
-    ('Offering', 30, 1, 'church'),
-    ('The Hub', 40, 1, 'unconfirmed'),
-    ('Building', 50, 1, 'church');
+INSERT INTO funds (name, sort_order, active, receiving_org, code) VALUES
+    ('General', 10, 1, 'church', NULL),
+    ('Tithes', 20, 1, 'church', NULL),
+    ('Offering', 30, 1, 'church', NULL),
+    ('The Hub', 40, 1, 'unconfirmed', 'hub'),
+    ('Building', 50, 1, 'church', NULL);

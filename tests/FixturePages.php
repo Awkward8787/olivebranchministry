@@ -117,7 +117,7 @@ final class FixturePages
                     ['date' => '2026-01-01', 'fund' => 'Tithes', 'method' => 'check', 'cents' => Money::parseCents('500.00')],
                 ],
                 'total_cents' => Money::parseCents('500.00'),
-                'language' => [Statements::NO_GOODS, Statements::INTANGIBLE],
+                'language' => [Statements::NO_GOODS],
             ],
         ]));
         $pages['login'] = View::adminHtml('login', [

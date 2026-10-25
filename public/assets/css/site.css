@@ -108,6 +108,13 @@ a:hover {
     overflow-wrap: anywhere;
 }
 
+.contact-email,
+.contact-email a,
+.statement-email {
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
+
 .actions a.quiet {
     color: var(--ink);
     text-decoration: underline;

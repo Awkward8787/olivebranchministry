@@ -10,7 +10,10 @@ use DateTimeZone;
 /**
  * Recorded gifts are append-only. A void or an adjustment is a new row.
  * A calendar year stays open to staff through January 31 of the next year.
- * After that, only an administrator can post a void or an adjustment.
+ * After that, only an administrator can record a gift, a void, or an adjustment.
+ *
+ * The first-release schema inserts the Hub fund as id 4 with code "hub".
+ * Later code matches that flag, not the fund's display name.
  */
 final class GiftPolicy
 {
@@ -18,21 +21,11 @@ final class GiftPolicy
 
     public const UNCONFIRMED = 'unconfirmed';
 
-    public static function refusesInPlaceAmountChange(string $role, int $fromCents, int $toCents): bool
-    {
-        if ($role !== 'admin' && $role !== 'staff') {
-            return true;
-        }
-        Money::assertCents($fromCents);
-        Money::assertCents($toCents);
+    public const HUB_CODE = 'hub';
 
-        return true;
-    }
+    public const HUB_SEED_ID = 4;
 
-    public static function newGiftUsesActiveFund(bool $active): bool
-    {
-        return $active;
-    }
+    public const CLOSED_YEAR = 'That year is closed to staff. Ask an administrator.';
 
     public static function yearClosedToStaff(string $giftDate, DateTimeImmutable $today): bool
     {
@@ -46,7 +39,7 @@ final class GiftPolicy
         return $todayDate > $close;
     }
 
-    public static function canPostAdjustment(string $role, string $giftDate, DateTimeImmutable $today): bool
+    public static function canWriteYear(string $role, string $giftDate, DateTimeImmutable $today): bool
     {
         if ($role === 'admin') {
             return true;
@@ -56,5 +49,14 @@ final class GiftPolicy
         }
 
         return !self::yearClosedToStaff($giftDate, $today);
+    }
+
+    public static function closedYearMessage(string $role, string $giftDate, DateTimeImmutable $today): ?string
+    {
+        if (self::canWriteYear($role, $giftDate, $today)) {
+            return null;
+        }
+
+        return self::CLOSED_YEAR;
     }
 }

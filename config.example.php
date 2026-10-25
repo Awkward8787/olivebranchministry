@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Copy this file to config.php. config.php is not committed.
- * Do not put The Hub's EIN in statement.ein. That organization is separate.
+ * Do not put the Hub EIN in statement.ein.
  */
 return [
     'db' => [
@@ -36,8 +36,10 @@ return [
         'from' => '',
     ],
     'privacy' => [
-        // Handled contact messages and prayer requests are deleted after this many days.
-        'handled_days' => 90,
+        // Leave handled_days unset. Handled inbox rows are kept.
+        // Set a positive whole number of days only after the church chooses one.
+        // The purge runs when someone opens /admin/inbox.
+        // 'handled_days' => 90,
     ],
     'statement' => [
         // Church EIN only. Leave empty to omit it from year-end statements.

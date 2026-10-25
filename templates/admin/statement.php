@@ -37,7 +37,7 @@ use Obm\ScheduleFormat;
         <p><?= e($person['first_name'] . ' ' . $person['last_name']) ?></p>
         <p><?= e($rangeLabel) ?></p>
         <?php if (!empty($issued)): ?><p>Issued <?= e($issued) ?></p><?php endif; ?>
-        <p><?= e(Church::PHONE_DISPLAY) ?><br><?= e(Church::EMAIL) ?></p>
+        <p class="statement-email"><?= e(Church::PHONE_DISPLAY) ?><br><?= e(Church::EMAIL) ?></p>
         <p class="note no-print">This statement includes gifts to funds the church receives. Other funds stay on the ledger and are left off this statement.</p>
         <div class="table-wrap">
         <table>

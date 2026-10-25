@@ -5,8 +5,22 @@ declare(strict_types=1);
 use Obm\ScheduleFormat;
 ?>
 <h1>Inbox</h1>
+<?php if (!empty($confirmDelete)): ?>
+    <form method="post" action="/admin/inbox" accept-charset="UTF-8">
+        <?= $csrfField ?>
+        <input type="hidden" name="type" value="<?= e((string) $confirmDelete['type']) ?>">
+        <input type="hidden" name="id" value="<?= (int) $confirmDelete['id'] ?>">
+        <p role="alert">Delete this <?= $confirmDelete['type'] === 'prayer' ? 'prayer request' : 'contact message' ?><?= !empty($confirmDelete['name']) ? ' from ' . e((string) $confirmDelete['name']) : '' ?>? This cannot be undone.</p>
+        <button type="submit" name="action" value="confirm-delete">Confirm delete</button>
+        <a href="/admin/inbox">Cancel</a>
+    </form>
+<?php endif; ?>
 <h2>Contact messages</h2>
-<p class="note">Handled messages and prayer requests are deleted after <?= (int) ($handledDays ?? 90) ?> days.</p>
+<?php if ($handledDays !== null): ?>
+    <p class="note">Handled messages and prayer requests are deleted after <?= (int) $handledDays ?> days. That deletion runs when this page is opened.</p>
+<?php else: ?>
+    <p class="note">Handled messages and prayer requests are kept until the church sets a retention period.</p>
+<?php endif; ?>
 <?php if ($contacts === []): ?>
     <p>No messages.</p>
 <?php else: ?>

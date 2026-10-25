@@ -74,10 +74,18 @@ foreach ($people as $person) {
     $ids[$person[0] . ' ' . $person[1]] = (int) $pdo->lastInsertId();
 }
 
-$fundRows = $pdo->query('SELECT id, name FROM funds')->fetchAll();
+$fundRows = $pdo->query('SELECT id, name, code FROM funds')->fetchAll();
 $funds = [];
+$hubId = null;
 foreach ($fundRows as $row) {
     $funds[(string) $row['name']] = (int) $row['id'];
+    if ((string) ($row['code'] ?? '') === 'hub') {
+        $hubId = (int) $row['id'];
+    }
+}
+if ($hubId === null) {
+    fwrite(STDERR, "The Hub fund (code hub) is missing.\n");
+    exit(1);
 }
 $serviceRows = $pdo->query('SELECT id, name FROM service_times')->fetchAll();
 $services = [];
@@ -94,7 +102,7 @@ $gifts = [
     ['Demo Donor', 'Tithes', '500.00', '2026-01-01', 'check', '1001', 'DEMO: January tithe', null, null],
     ['Demo Donor', 'Offering', '40.25', '2026-02-28', 'cash', null, 'DEMO: February offering', null, null],
     ['Demo Donor', 'General', '150.00', '2026-10-04', 'cash', null, 'DEMO: October general', null, null],
-    ['Demo Donor', 'The Hub', '75.10', '2026-10-18', 'check', '1002', 'DEMO: October hub', null, null],
+    ['Demo Donor', 'hub', '75.10', '2026-10-18', 'check', '1002', 'DEMO: October hub', null, null],
     [null, 'General', '25.00', '2026-10-11', 'cash', null, 'DEMO: anonymous general', null, null],
     ['Sample Member', 'Building', '100.00', '2026-10-20', 'check', '1003', 'DEMO: meal good-faith estimate 15.00', 'meal', $mealEstimate],
     ['Demo Donor', 'Tithes', '300.00', '2025-12-31', 'check', '1004', 'DEMO: prior year tithe', null, null],
@@ -104,7 +112,7 @@ $gifts = [
 foreach ($gifts as $gift) {
     $insertGift->execute([
         ':person' => $gift[0] === null ? null : $ids[$gift[0]],
-        ':fund' => $funds[$gift[1]],
+        ':fund' => $gift[1] === 'hub' ? $hubId : $funds[$gift[1]],
         ':cents' => (string) Money::parseCents($gift[2]),
         ':date' => $gift[3],
         ':method' => $gift[4],
