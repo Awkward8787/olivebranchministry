@@ -377,6 +377,13 @@ button.danger {
     color: var(--paper);
 }
 
+.confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+}
+
 .inline-form {
     display: inline;
 }

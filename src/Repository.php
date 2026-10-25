@@ -888,8 +888,8 @@ final class Repository
         return (string) $e->getCode() === '23000';
     }
 
-    /** @param array<string, mixed> $row */
-    /** @param array<string, mixed> $row
+    /**
+     * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
     private function mapGift(array $row): array
