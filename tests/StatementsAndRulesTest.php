@@ -425,7 +425,7 @@ final class StatementsAndRulesTest extends TestCase
         $this->assertSame(-50000, $void['data']['amount_cents']);
     }
 
-    public function testPrayerMailIsANoticeAndHandledRowsExpireAfterNinetyDays(): void
+    public function testPrayerMailIsANoticeAndHandledRowsStayUntilAPeriodIsSet(): void
     {
         $notice = Mailer::prayerNotice('https://example.org/admin/inbox');
         $this->assertStringContainsString('A new prayer request is waiting.', $notice);

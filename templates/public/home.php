@@ -13,7 +13,6 @@ include dirname(__DIR__) . '/partials/banner.php';
         <p class="actions">
             <a class="button" href="/plan-your-visit">Plan your visit</a>
             <a class="quiet" href="/give">Give</a>
-            <a class="quiet" href="/the-hub">The Hub</a>
             <a class="quiet" href="/contact">Contact</a>
         </p>
     </section>

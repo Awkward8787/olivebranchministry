@@ -11,8 +11,10 @@ use Obm\ScheduleFormat;
         <input type="hidden" name="type" value="<?= e((string) $confirmDelete['type']) ?>">
         <input type="hidden" name="id" value="<?= (int) $confirmDelete['id'] ?>">
         <p role="alert">Delete this <?= $confirmDelete['type'] === 'prayer' ? 'prayer request' : 'contact message' ?><?= !empty($confirmDelete['name']) ? ' from ' . e((string) $confirmDelete['name']) : '' ?>? This cannot be undone.</p>
-        <button type="submit" name="action" value="confirm-delete">Confirm delete</button>
-        <a href="/admin/inbox">Cancel</a>
+        <p class="confirm-actions">
+            <button class="danger" type="submit" name="action" value="confirm-delete">Confirm delete</button>
+            <a href="/admin/inbox">Cancel</a>
+        </p>
     </form>
 <?php endif; ?>
 <h2>Contact messages</h2>
