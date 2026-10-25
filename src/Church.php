@@ -33,11 +33,14 @@ final class Church
 
     public const MISSION = 'To cultivate spiritual growth by restoring individuals to wholeness, equipping them for service, and uniting them in Christ-centered communities.';
 
-    /** @var list<array{name:string, role:string}> */
+    public const PASTOR_CAPTION = 'Pastor Jerrell Anderson & Pastor Carmen James-Anderson';
+
+    public const PASTOR_ALT = 'Pastor Jerrell Anderson and Pastor Carmen James-Anderson of Olive Branch Ministries';
+
+    /** @var list<string> */
     public const LEADERS = [
-        ['name' => 'Pastor Jerrell Anderson', 'role' => 'Lead Pastor'],
-        ['name' => 'Pastor Carmen James-Anderson', 'role' => 'Pastor'],
-        ['name' => 'Pastor Debbie Herring', 'role' => 'Pastor'],
+        'Pastor Jerrell Anderson',
+        'Pastor Carmen James-Anderson',
     ];
 
     /** @var list<string> */

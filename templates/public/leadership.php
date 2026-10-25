@@ -8,11 +8,8 @@ use Obm\Church;
     <h1>Leadership</h1>
     <?php include dirname(__DIR__) . '/partials/portrait.php'; ?>
     <ul class="leaders">
-        <?php foreach (Church::LEADERS as $leader): ?>
-            <li>
-                <span class="leader-name"><?= e($leader['name']) ?></span>
-                <span class="role"><?= e($leader['role']) ?></span>
-            </li>
+        <?php foreach (Church::LEADERS as $name): ?>
+            <li><?= e($name) ?></li>
         <?php endforeach; ?>
     </ul>
 </div>

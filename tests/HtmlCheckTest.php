@@ -32,9 +32,13 @@ final class HtmlCheckTest extends TestCase
         $this->assertStringContainsString('maps.google.com', $pages['visit']);
         $this->assertStringNotContainsString('Give online', $pages['give']);
         $this->assertStringContainsString('https://give.example.org/olive', $pages['give-online']);
-        $this->assertStringContainsString('Portrait of our pastors', $pages['leadership']);
-        $this->assertStringContainsString('>Our Pastors<', $pages['leadership']);
+        $this->assertStringContainsString('Pastor Jerrell Anderson and Pastor Carmen James-Anderson of Olive Branch Ministries', $pages['leadership']);
+        $this->assertStringContainsString('Pastor Jerrell Anderson &amp; Pastor Carmen James-Anderson', $pages['leadership']);
         $this->assertStringContainsString('Pastor Jerrell Anderson', $pages['leadership']);
+        $this->assertStringContainsString('Pastor Carmen James-Anderson', $pages['leadership']);
+        $this->assertStringNotContainsString('Our Pastors', $pages['leadership']);
+        $this->assertStringNotContainsString('Debbie', $pages['leadership']);
+        $this->assertStringNotContainsString('Lead Pastor', $pages['leadership']);
         $this->assertStringContainsString('Rooted in Faith, Reaching in Love', $pages['home']);
         $this->assertStringContainsString('41-5032500', $pages['hub']);
         $this->assertStringNotContainsString('41-5032500', $pages['statement']);

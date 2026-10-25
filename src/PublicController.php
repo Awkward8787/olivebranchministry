@@ -49,7 +49,7 @@ final class PublicController
                 $this->show('about', 'About', Church::MISSION, '/about', $schema);
                 return;
             case '/leadership':
-                $this->show('leadership', 'Leadership', 'Pastor Jerrell Anderson, Lead Pastor; Pastor Carmen James-Anderson; Pastor Debbie Herring.', '/leadership', $schema);
+                $this->show('leadership', 'Leadership', Church::PASTOR_CAPTION, '/leadership', $schema);
                 return;
             case '/ministries':
                 $related = [];

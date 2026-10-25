@@ -1,8 +1,8 @@
 # Still needed from the church
 
-The public site and the office tools use only facts that were confirmed. These items are still open. Until they are confirmed, the site leaves them out.
+The public site and the office tools use only facts that were confirmed. The portrait names are resolved. Every other item below is still open, and the site leaves those out until the church confirms them.
 
-- Portrait names. The leadership page shows the couple photograph with the caption "Our Pastors". It does not name the people in the picture.
+- Portrait names. Resolved. The owner confirmed these names from the church's Facebook page: Pastor Jerrell Anderson and Pastor Carmen James-Anderson. The portrait caption is "Pastor Jerrell Anderson & Pastor Carmen James-Anderson".
 - A second street address, 1601 2nd Ave SE, Moultrie, appeared in one post and is not confirmed. It is not on the site.
 - Photographs other than the official banner and that portrait.
 - Descriptions for Men's Ministry, Youth Ministry, and Prayer & Fasting beyond the service times already published.
