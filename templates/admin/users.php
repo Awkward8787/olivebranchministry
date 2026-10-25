@@ -18,7 +18,7 @@ if (($mode ?? 'list') === 'list'):
                 <tr>
                     <td data-label="Name"><a href="/admin/users/<?= (int) $row['id'] ?>"><?= e($row['name']) ?></a></td>
                     <td data-label="Email"><?= e($row['email']) ?></td>
-                    <td data-label="Role"><?= e($row['role']) ?></td>
+                    <td data-label="Role"><?= e($row['role']) ?><?= !empty($row['disabled_at']) ? ' disabled' : '' ?></td>
                     <td data-label="Last sign-in"><?= !empty($row['last_login_at']) ? e(ScheduleFormat::longDateTime((string) $row['last_login_at'])) : '' ?></td>
                 </tr>
             <?php endforeach; ?>
@@ -57,7 +57,14 @@ if (($mode ?? 'list') === 'list'):
         <input type="password" name="password" maxlength="72" autocomplete="new-password"<?= ($editId ?? 0) === 0 ? ' required' : '' ?>>
     </label>
     <?php if (isset($errors['password'])): ?><p class="error" role="alert"><?= e($errors['password']) ?></p><?php endif; ?>
-    <p class="note">Use 12 to 72 characters. There is no email reset.</p>
+    <?php if (($editId ?? 0) > 0): ?>
+        <label class="check">
+            <input type="checkbox" name="disabled" value="1"<?= checked_if(($form['disabled'] ?? '') === '1') ?>>
+            <span>Disable this account</span>
+        </label>
+        <?php if (isset($errors['disabled'])): ?><p class="error" role="alert"><?= e($errors['disabled']) ?></p><?php endif; ?>
+    <?php endif; ?>
+    <p class="note">Use 12 to 72 characters. Changing the password ends that person's other sessions. There is no email reset.</p>
     <button type="submit">Save user</button>
 </form>
 <?php endif; ?>

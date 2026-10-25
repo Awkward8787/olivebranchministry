@@ -73,6 +73,19 @@ final class Rules
         if (strlen($goods) > 500) {
             $errors['goods_or_services'] = 'That note must be 500 characters or fewer.';
         }
+        $goodsValueRaw = trim($input['goods_value'] ?? '');
+        $goodsValue = null;
+        if ($goods !== '' && $goodsValueRaw === '') {
+            $errors['goods_value'] = 'Enter a good-faith estimate when goods or services were provided.';
+        } elseif ($goods === '' && $goodsValueRaw !== '') {
+            $errors['goods_value'] = 'Leave the estimate blank when no goods or services were provided.';
+        } elseif ($goodsValueRaw !== '') {
+            try {
+                $goodsValue = Money::parseCents($goodsValueRaw);
+            } catch (InvalidArgumentException $e) {
+                $errors['goods_value'] = $e->getMessage();
+            }
+        }
 
         return [
             'errors' => $errors,
@@ -85,6 +98,67 @@ final class Rules
                 'person_id' => $personId,
                 'note' => $note === '' ? null : $note,
                 'goods_or_services' => $goods === '' ? null : $goods,
+                'goods_value_cents' => $goodsValue,
+            ],
+        ];
+    }
+
+    /**
+     * A void or adjustment. The reason is required. The amount is a signed
+     * cent delta. A void reverses whatever net remains.
+     *
+     * @param array<string, string> $input
+     * @return array{errors:array<string, string>, data:array<string, mixed>}
+     */
+    public static function giftEntry(array $input, int $currentNet): array
+    {
+        $errors = [];
+        $currentNet = Money::assertCents($currentNet);
+        $kind = $input['kind'] ?? '';
+        if (!in_array($kind, ['adjustment', 'void'], true)) {
+            $errors['kind'] = 'Choose an adjustment or a void.';
+        }
+        $reason = trim($input['reason'] ?? '');
+        if ($reason === '') {
+            $errors['reason'] = 'Enter a reason.';
+        } elseif (strlen($reason) > 500) {
+            $errors['reason'] = 'Reason must be 500 characters or fewer.';
+        }
+        $signed = null;
+        if ($kind === 'void') {
+            if ($currentNet <= 0) {
+                $errors['kind'] = 'This gift is already zero.';
+            } else {
+                $signed = -$currentNet;
+            }
+        } elseif ($kind === 'adjustment') {
+            $cents = null;
+            try {
+                $cents = Money::parseCents($input['amount'] ?? '');
+                if ($cents <= 0) {
+                    $errors['amount'] = 'Enter an amount greater than zero.';
+                }
+            } catch (InvalidArgumentException $e) {
+                $errors['amount'] = $e->getMessage();
+            }
+            $direction = $input['direction'] ?? '';
+            if (!in_array($direction, ['increase', 'decrease'], true)) {
+                $errors['direction'] = 'Choose increase or decrease.';
+            }
+            if ($cents !== null && $cents > 0 && $errors === []) {
+                $signed = $direction === 'decrease' ? -$cents : $cents;
+                if ($signed < 0 && -$signed > $currentNet) {
+                    $errors['amount'] = 'An adjustment cannot reduce a gift below zero.';
+                }
+            }
+        }
+
+        return [
+            'errors' => $errors,
+            'data' => [
+                'kind' => $kind,
+                'amount_cents' => $signed,
+                'reason' => $reason,
             ],
         ];
     }
@@ -440,6 +514,10 @@ final class Rules
             $sort = (int) $sortRaw;
         }
         $active = ($input['active'] ?? '') === '1' ? 1 : 0;
+        $org = $input['receiving_org'] ?? GiftPolicy::CHURCH;
+        if (!in_array($org, [GiftPolicy::CHURCH, GiftPolicy::UNCONFIRMED], true)) {
+            $errors['receiving_org'] = 'Choose who receives this fund.';
+        }
 
         return [
             'errors' => $errors,
@@ -447,6 +525,7 @@ final class Rules
                 'name' => $name,
                 'sort_order' => $sort,
                 'active' => $active,
+                'receiving_org' => $org === GiftPolicy::CHURCH ? GiftPolicy::CHURCH : GiftPolicy::UNCONFIRMED,
             ],
         ];
     }

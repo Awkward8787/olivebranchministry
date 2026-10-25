@@ -8,7 +8,7 @@ final class PublicController
 {
     public function __construct(
         private Config $config,
-        private Repository $repo,
+        private ?Repository $repo,
         private Mailer $mailer,
     ) {
     }
@@ -36,7 +36,7 @@ final class PublicController
             return;
         }
 
-        $services = $this->repo->services(true);
+        $services = $this->services();
         $schema = SchemaOrg::church($services, Http::baseUrl($this->config) . '/', Http::baseUrl($this->config) . '/assets/img/banner-1284.jpg');
 
         switch ($path) {
@@ -63,9 +63,13 @@ final class PublicController
                 ]);
                 return;
             case '/the-hub':
-                $this->show('hub', 'The Hub', 'The Hub at Olive Branch is a community resource center and a separate 501(c)(3), The Hub at Olive Branch Inc.', '/the-hub', $schema);
+                $this->show('hub', 'The Hub', 'The Hub fund at Olive Branch Ministries Inc.', '/the-hub', $schema);
                 return;
             case '/events':
+                if ($this->repo === null) {
+                    $this->unavailable();
+                    return;
+                }
                 $today = Clock::now()->format('Y-m-d') . ' 00:00:00';
                 $events = $this->repo->upcomingEvents($today);
                 $this->show('events', 'Events', 'Upcoming events at Olive Branch Ministries Inc. in Moultrie, Georgia.', '/events', $this->eventSchema($services, $events), [
@@ -122,6 +126,10 @@ final class PublicController
     private function submit(string $kind): void
     {
         Csrf::verify(Http::input('csrf'));
+        if ($this->repo === null) {
+            $this->unavailable();
+            return;
+        }
         if (!$this->repo->allowSubmission(RateWindow::formBucket($kind, Http::ip()), Clock::now())) {
             $this->show('limited', 'Please wait', 'That form was submitted too many times from this network.', '/contact', null, [], 'noindex', 429);
             return;
@@ -151,7 +159,7 @@ final class PublicController
             $this->repo->addPrayer($checked['data'], $now);
             $this->notify(
                 'Olive Branch Ministries prayer request',
-                "Name: {$checked['data']['name']}\nEmail: " . ($checked['data']['email'] ?? '') . "\nPhone: " . ($checked['data']['phone'] ?? '') . "\n\n{$checked['data']['request']}\n",
+                Mailer::prayerNotice(Http::baseUrl($this->config) . '/admin/inbox'),
             );
             redirect_to('/prayer/received');
         }
@@ -159,21 +167,37 @@ final class PublicController
         $this->notify(
             'Olive Branch Ministries contact',
             "Name: {$checked['data']['name']}\nEmail: {$checked['data']['email']}\nPhone: " . ($checked['data']['phone'] ?? '') . "\n\n{$checked['data']['message']}\n",
+            (string) $checked['data']['email'],
         );
         redirect_to('/contact/received');
     }
 
-    private function notify(string $subject, string $body): void
+    private function notify(string $subject, string $body, ?string $replyTo = null): void
     {
         if (!$this->mailer->enabled()) {
             return;
         }
-        $this->mailer->notify($subject, $body);
+        $this->mailer->notify($subject, $body, $replyTo);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function services(): array
+    {
+        if ($this->repo === null) {
+            return Church::publishedServices();
+        }
+
+        return $this->repo->services(true);
+    }
+
+    private function unavailable(): void
+    {
+        $this->show('unavailable', 'Unavailable', 'The church records are unavailable right now.', '/unavailable', null, [], 'noindex', 500);
     }
 
     private function notFound(): void
     {
-        $services = $this->repo->services(true);
+        $services = $this->services();
         $this->show('not-found', 'Page not found', 'That page is not on the Olive Branch Ministries site.', '/404', SchemaOrg::church($services, Http::baseUrl($this->config) . '/', ''), [], 'noindex', 404);
     }
 

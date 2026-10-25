@@ -72,7 +72,34 @@ final class ScheduleFormat
             return $text;
         }
 
-        return $text . '–' . self::clock($end);
+        return $text . ' to ' . self::clock($end);
+    }
+
+    public static function dayLabel(int $weekday, ?string $note): string
+    {
+        $day = self::weekday($weekday);
+        $note = trim((string) $note);
+        if ($note !== '' && preg_match('/\b' . preg_quote($day, '/') . '\b/i', $note) === 1) {
+            return $note;
+        }
+        if ($note !== '') {
+            return $day . ', ' . $note;
+        }
+
+        return $day;
+    }
+
+    /**
+     * Day and time without the service name, so a heading is not repeated.
+     *
+     * @param array{name?:string, weekday:int, start_time:string, end_time?:?string, note?:?string} $service
+     */
+    public static function when(array $service): string
+    {
+        return self::dayLabel((int) $service['weekday'], isset($service['note']) ? (string) $service['note'] : null)
+            . ', '
+            . self::clockRange((string) $service['start_time'], isset($service['end_time']) ? (string) $service['end_time'] : null)
+            . '.';
     }
 
     /**

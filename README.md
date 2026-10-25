@@ -64,7 +64,7 @@ flowchart LR
     rows[Gift rows in cents]
     ledger[Ledger total]
     funds[Sum of fund totals]
-    named[Sum of named statements]
+    named[Sum of named gifts]
     anon[Anonymous gifts]
     rows --> ledger
     rows --> funds
@@ -80,9 +80,9 @@ For any inclusive date range:
 
 - the sum of per-fund totals
 - the ledger total
-- the sum of named donors' statement totals plus anonymous gifts
+- the sum of named gifts plus anonymous gifts
 
-are the same number. Anonymous gifts stay in the ledger and in their fund. They are not printed on a person's statement. If every gift names a donor, the statement totals equal the ledger. The office refuses to show a report if that identity fails.
+are the same number. Anonymous gifts stay in the ledger and in their fund. They are not printed on a person's statement. A church statement includes only funds whose receiving organization is the church. The Hub fund is unconfirmed, so its gifts stay on the ledger and are left off the church statement. The office refuses to show a ledger if the identity fails.
 
 ## Money, dates, and attendance
 
@@ -105,7 +105,7 @@ Create an empty database, put its name, user, and password only in `config.php`,
 
 ```bash
 mysql -u olive_branch -p olive_branch < schema.sql
-ADMIN_EMAIL='you@example.com' ADMIN_PASSWORD='a long passphrase' php bin/seed-admin.php
+read -rs ADMIN_PASSWORD && export ADMIN_PASSWORD && ADMIN_EMAIL='you@example.com' php bin/seed-admin.php; unset ADMIN_PASSWORD
 php -S 127.0.0.1:8080 -t public bin/php-server-router.php
 ```
 
@@ -154,18 +154,24 @@ home/
 6. From the Hostinger terminal, in the directory that contains `bin/`:
 
 ```bash
-ADMIN_EMAIL='office@example.com' ADMIN_PASSWORD='a long passphrase' php bin/seed-admin.php
+read -rs ADMIN_PASSWORD && export ADMIN_PASSWORD && ADMIN_EMAIL='office@example.com' php bin/seed-admin.php; unset ADMIN_PASSWORD
 ```
 
-   The password is an environment variable, not a committed file and not a script argument. Use 12 to 72 characters. Remove it from shell history after it succeeds. Do not run `bin/seed-demo.php` on the public database.
+   The password is an environment variable, not a committed file and not a script argument. `read -rs` keeps it out of shell history. Use 12 to 72 characters. Running the command again prints `Account exists; nothing changed` and does not reset the password or change the role. `--reset-password` resets the password and ends that account's other sessions. `--make-admin` sets the role to administrator and does not change the password unless `--reset-password` is also present. Do not run `bin/seed-demo.php` on the public database.
+
+   A database created from the first `schema.sql` can be upgraded once with `sql/migrate-review.sql`. Do not import `schema.sql` again into a live database.
 7. Open `/` and `/admin/login`. Sign in, then change nothing in `schema.sql` on later deploys. Importing it again into a live database will fail because the tables already exist, which is intentional.
 
 `config.php` is gitignored. The root `.htaccess` denies `src/`, `templates/`, `bin/`, `tests/`, `docs/`, and `config.php` if the document root is ever pointed at the project folder instead of `public/`.
 
 ## Office notes
 
-Staff and administrators share the inbox, directory, giving ledger, attendance, events, and service times. Prayer requests are visible only after sign-in. Administrators also manage funds and users. The last administrator cannot be demoted. Gift deletion is limited to administrators and asks for confirmation. There is no email password reset.
+Staff and administrators share the inbox, directory, giving ledger, attendance, events, and service times. Prayer requests are visible only after sign-in. The notification email says a request is waiting and links to the inbox. It does not include the request. Handled messages and prayer requests are deleted after `privacy.handled_days` (90 by default). The inbox pages older rows instead of stopping at 200. Administrators also manage funds and users. The last administrator cannot be demoted or disabled. A password change ends that account's other sessions. There is no email password reset.
 
-Year-end statements are printable HTML. Use the browser's print dialog and choose Save as PDF. The church name and address are printed. The goods-or-services sentence says nothing was provided unless a gift says otherwise. A church EIN is printed only when `statement.ein` is set to a value other than The Hub's EIN.
+Recorded gifts are append-only. Staff and administrators post a void or an adjustment with a reason. The audit log stores who, when, and why. A year stays open to staff through January 31 of the next year. After that, only an administrator can post a void or an adjustment. New gifts use active funds. The ledger and the statement use the net of the original amount, adjustments, and voids.
+
+Year-end statements are printable HTML. Use the browser's print dialog and choose Save as PDF. The church name, address, phone, and email are printed, with the issue date. A goods or services note requires a good-faith estimate in cents, and the statement prints that estimate. The intangible-religious-benefits sentence is printed by default. A church EIN is printed only when `statement.ein` is set to a value other than The Hub's EIN. Set `mail.from` to an address on the site's own domain before notifications are sent. Leave it blank to skip mail. Do not use the church Gmail address as `From`.
+
+Set `expose_php` to `Off` in the host PHP settings. The application removes `X-Powered-By` on each response. `Strict-Transport-Security` is sent when the request is HTTPS.
 
 What the church still needs to confirm is listed in [docs/CHURCH-TODO.md](docs/CHURCH-TODO.md).

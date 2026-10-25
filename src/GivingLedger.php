@@ -16,8 +16,11 @@ use RuntimeException;
  *   = sum of named donor statement totals + anonymous total
  *
  * Anonymous gifts stay in the ledger and in their fund. They are not placed
- * on a person's year-end statement. When every gift names a donor, the sum of
- * statement totals equals the ledger total.
+ * on a person's year-end statement. The ledger total is the sum of net cents
+ * (the original gift, plus adjustments, plus voids). A church statement
+ * includes only funds the church receives. When every included gift names a
+ * donor, those statement totals plus anonymous gifts plus gifts to other
+ * organizations equal the ledger.
  */
 final class GivingLedger
 {
@@ -32,7 +35,11 @@ final class GivingLedger
      *   method:?string,
      *   reference:?string,
      *   note:?string,
-     *   goods_or_services:?string
+     *   goods_or_services:?string,
+     *   goods_value_cents:?int,
+     *   receiving_org:string,
+     *   original_cents:int,
+     *   voided:bool
      * }
      */
     public static function normalize(array $gift): array
@@ -66,7 +73,84 @@ final class GivingLedger
             'goods_or_services' => isset($gift['goods_or_services']) && is_string($gift['goods_or_services']) && trim($gift['goods_or_services']) !== ''
                 ? trim($gift['goods_or_services'])
                 : null,
+            'goods_value_cents' => self::goodsValue($gift),
+            'receiving_org' => self::receivingOrg($gift),
+            'original_cents' => array_key_exists('original_cents', $gift)
+                ? Money::assertCents($gift['original_cents'])
+                : Money::assertCents($gift['cents']),
+            'voided' => !empty($gift['voided']),
         ];
+    }
+
+    /**
+     * Net cents are the original amount plus each adjustment and void.
+     * A void row stores the negation of the remaining net.
+     *
+     * @param list<array{kind:string, amount_cents:int}> $entries
+     */
+    public static function netCents(int $originalCents, array $entries): int
+    {
+        $net = Money::assertCents($originalCents);
+        foreach ($entries as $entry) {
+            $kind = (string) ($entry['kind'] ?? '');
+            $delta = $entry['amount_cents'] ?? null;
+            if (!is_int($delta)) {
+                throw new InvalidArgumentException('Adjustment cents must be an integer.');
+            }
+            if ($kind === 'void') {
+                if ($delta !== -$net) {
+                    throw new InvalidArgumentException('A void must reverse the remaining amount.');
+                }
+                $net = 0;
+                continue;
+            }
+            if ($kind !== 'adjustment') {
+                throw new InvalidArgumentException('Unknown gift entry.');
+            }
+            if ($delta === 0) {
+                throw new InvalidArgumentException('An adjustment cannot be zero.');
+            }
+            $net = self::combine($net, $delta);
+        }
+
+        return $net;
+    }
+
+    public static function combine(int $original, int $signedDelta): int
+    {
+        $original = Money::assertCents($original);
+        if ($signedDelta >= 0) {
+            return Money::sum([$original, $signedDelta]);
+        }
+        $reduce = -$signedDelta;
+        if ($reduce > $original) {
+            throw new RuntimeException('A gift net is below zero.');
+        }
+
+        return $original - $reduce;
+    }
+
+    /** @param array<string, mixed> $gift */
+    private static function receivingOrg(array $gift): string
+    {
+        if (!array_key_exists('receiving_org', $gift) || $gift['receiving_org'] === null || $gift['receiving_org'] === '') {
+            return GiftPolicy::CHURCH;
+        }
+        if (!is_string($gift['receiving_org'])) {
+            throw new InvalidArgumentException('Receiving organization is missing.');
+        }
+
+        return $gift['receiving_org'] === GiftPolicy::CHURCH ? GiftPolicy::CHURCH : GiftPolicy::UNCONFIRMED;
+    }
+
+    /** @param array<string, mixed> $gift */
+    private static function goodsValue(array $gift): ?int
+    {
+        if (!array_key_exists('goods_value_cents', $gift) || $gift['goods_value_cents'] === null || $gift['goods_value_cents'] === '') {
+            return null;
+        }
+
+        return Money::assertCents($gift['goods_value_cents']);
     }
 
     /**

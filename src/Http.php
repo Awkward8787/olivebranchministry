@@ -84,12 +84,16 @@ final class Http
         return (self::isHttps($config) ? 'https' : 'http') . '://' . $host;
     }
 
-    public static function sendSecurityHeaders(): void
+    public static function sendSecurityHeaders(Config $config): void
     {
+        header_remove('X-Powered-By');
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: DENY');
         header('Referrer-Policy: strict-origin-when-cross-origin');
         header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+        if (self::isHttps($config)) {
+            header('Strict-Transport-Security: max-age=31536000');
+        }
         $script = "script-src 'self'";
         if (self::$cspNonce !== '' && preg_match('/^[A-Za-z0-9]+$/', self::$cspNonce) === 1) {
             $script .= " 'nonce-" . self::$cspNonce . "'";

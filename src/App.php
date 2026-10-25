@@ -15,13 +15,19 @@ final class App
         Http::$cspNonce = bin2hex(random_bytes(16));
         try {
             $config = Config::load(dirname(__DIR__) . '/config.php');
-            Http::sendSecurityHeaders();
-            Session::start($config);
+            Http::sendSecurityHeaders($config);
             $path = Http::path();
             $method = Http::method();
-            $db = Database::connect($config);
-            $repo = new Repository($db);
+            if (self::needsSession($path, $method)) {
+                Session::start($config);
+            }
+            $repo = self::repository($config);
             if (str_starts_with($path, '/admin')) {
+                if ($repo === null) {
+                    self::fail(500, 'Unavailable', 'The church records are unavailable right now.');
+
+                    return;
+                }
                 Http::sendNoStore();
                 (new AdminController($config, $repo, new Auth($repo)))->dispatch($method, $path);
 
@@ -29,17 +35,49 @@ final class App
             }
             (new PublicController($config, $repo, new Mailer($config)))->dispatch($method, $path);
         } catch (CsrfException $e) {
+            self::log($e);
             self::fail(400, 'Form expired', $e->getMessage());
-        } catch (PDOException) {
+        } catch (PDOException $e) {
+            self::log($e);
             self::fail(500, 'Unavailable', 'The church records are unavailable right now.');
         } catch (RuntimeException $e) {
+            self::log($e);
             $message = str_contains($e->getMessage(), 'config.php')
                 ? 'The site is not configured yet.'
                 : 'The page could not be shown.';
             self::fail(500, 'Unavailable', $message);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            self::log($e);
             self::fail(500, 'Unavailable', 'The page could not be shown.');
         }
+    }
+
+    private static function needsSession(string $path, string $method): bool
+    {
+        if (str_starts_with($path, '/admin')) {
+            return true;
+        }
+        if ($path === '/contact') {
+            return true;
+        }
+
+        return $method === 'POST' && ($path === '/prayer' || $path === '/contact');
+    }
+
+    private static function repository(Config $config): ?Repository
+    {
+        try {
+            return new Repository(Database::connect($config));
+        } catch (PDOException $e) {
+            self::log($e);
+
+            return null;
+        }
+    }
+
+    private static function log(Throwable $e): void
+    {
+        error_log(get_class($e) . ': ' . $e->getMessage());
     }
 
     private static function fail(int $status, string $title, string $message): void

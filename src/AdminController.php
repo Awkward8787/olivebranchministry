@@ -58,8 +58,11 @@ final class AdminController
             return;
         }
         if (preg_match('#^/admin/giving/([1-9]\d{0,8})/delete$#', $path, $m) === 1) {
-            $this->deleteGift($user, $method, (int) $m[1]);
-            return;
+            if ($method === 'POST') {
+                Csrf::verify(Http::input('csrf'));
+            }
+            Flash::set('Recorded gifts cannot be deleted. Void the gift with a reason.', 'error');
+            redirect_to('/admin/giving/' . $m[1]);
         }
         if (preg_match('#^/admin/giving/([1-9]\d{0,8})$#', $path, $m) === 1) {
             $this->giving($user, $method, (int) $m[1]);
@@ -174,9 +177,23 @@ final class AdminController
     /** @param array{id:int, email:string, role:string, name:string} $user */
     private function inbox(array $user): void
     {
+        $days = (int) $this->config->get('privacy.handled_days', Retention::DEFAULT_HANDLED_DAYS);
+        if ($days < 1) {
+            $days = Retention::DEFAULT_HANDLED_DAYS;
+        }
+        $this->repo->purgeHandled(Retention::cutoff(Clock::now(), $days));
+        $contactPage = $this->positiveId(Http::query('contact_page')) ?? 1;
+        $prayerPage = $this->positiveId(Http::query('prayer_page')) ?? 1;
+        $contacts = $this->repo->inboxPage('contact_messages', 'id, name, email, phone, message, created_at, handled_at', $contactPage);
+        $prayers = $this->repo->inboxPage('prayer_requests', 'id, name, email, phone, request, created_at, handled_at', $prayerPage);
         $this->render('inbox', 'Inbox', $user, 'inbox', [
-            'contacts' => $this->repo->contacts(),
-            'prayers' => $this->repo->prayers(),
+            'contacts' => $contacts['rows'],
+            'prayers' => $prayers['rows'],
+            'contactPage' => $contacts['page'],
+            'prayerPage' => $prayers['page'],
+            'contactsMore' => $contacts['more'],
+            'prayersMore' => $prayers['more'],
+            'handledDays' => $days,
         ]);
     }
 
@@ -190,7 +207,13 @@ final class AdminController
             $this->missing($user);
             return;
         }
-        $handled = Http::input('handled') === '1';
+        $action = Http::input('action');
+        if ($action === 'delete') {
+            $this->repo->deleteInbox($type, $id);
+            Flash::set('Deleted.');
+            redirect_to('/admin/inbox');
+        }
+        $handled = $action === 'handle';
         $this->repo->setHandled(
             $type,
             $id,
@@ -299,7 +322,7 @@ final class AdminController
             }
         }
         $form = [
-            'amount' => $existing === null ? '' : Money::toInput($existing['cents']),
+            'amount' => '',
             'date' => $existing['date'] ?? Clock::now()->format('Y-m-d'),
             'method' => $existing['method'] ?? 'cash',
             'reference' => $existing['reference'] ?? '',
@@ -307,58 +330,88 @@ final class AdminController
             'person_id' => isset($existing['donor_id']) && $existing['donor_id'] !== null ? (string) $existing['donor_id'] : '',
             'note' => $existing['note'] ?? '',
             'goods_or_services' => $existing['goods_or_services'] ?? '',
+            'goods_value' => isset($existing['goods_value_cents']) && $existing['goods_value_cents'] !== null ? Money::toInput((int) $existing['goods_value_cents']) : '',
+            'kind' => 'adjustment',
+            'direction' => 'decrease',
+            'reason' => '',
         ];
         $errors = [];
-        if ($method === 'POST') {
+        $canAdjust = false;
+        if ($existing !== null) {
+            $canAdjust = empty($existing['voided']) && GiftPolicy::canPostAdjustment($user['role'], (string) $existing['date'], Clock::now());
+        }
+        if ($method === 'POST' && $id === 0) {
             Csrf::verify(Http::input('csrf'));
-            $form = $this->posted(['amount', 'date', 'method', 'reference', 'fund_id', 'person_id', 'note', 'goods_or_services']);
-            $checked = Rules::gift($form, $this->repo->fundIds(false), $this->repo->personIds());
+            $form = $this->posted(['amount', 'date', 'method', 'reference', 'fund_id', 'person_id', 'note', 'goods_or_services', 'goods_value']);
+            $activeFundIds = [];
+            foreach ($this->repo->funds(true) as $fund) {
+                if (GiftPolicy::newGiftUsesActiveFund((int) $fund['active'] === 1)) {
+                    $activeFundIds[] = (int) $fund['id'];
+                }
+            }
+            $checked = Rules::gift($form, $activeFundIds, $this->repo->personIds());
             $errors = $checked['errors'];
             if ($errors === []) {
                 $saved = $this->repo->saveGift(
                     $checked['data'],
-                    $id === 0 ? null : $id,
+                    null,
                     $user['id'],
                     Clock::now()->format('Y-m-d H:i:s'),
                 );
-                Flash::set('Gift saved.');
+                Flash::set('Gift recorded.');
                 redirect_to('/admin/giving/' . $saved);
+            }
+        } elseif ($method === 'POST' && $existing !== null) {
+            Csrf::verify(Http::input('csrf'));
+            $entry = $this->posted(['kind', 'amount', 'direction', 'reason']);
+            $form = array_merge($form, $entry);
+            $kind = $entry['kind'];
+            if ($kind !== 'adjustment' && $kind !== 'void') {
+                $postedCents = $existing['original_cents'];
+                try {
+                    $postedCents = Money::parseCents($entry['amount']);
+                } catch (\InvalidArgumentException) {
+                    $postedCents = $existing['original_cents'];
+                }
+                if (GiftPolicy::refusesInPlaceAmountChange($user['role'], (int) $existing['original_cents'], $postedCents)) {
+                    $errors['amount'] = 'Recorded gifts cannot be edited. Post an adjustment or a void with a reason.';
+                }
+            } elseif (!$canAdjust) {
+                $this->forbid($user);
+                return;
+            } else {
+                $checked = Rules::giftEntry($entry, (int) $existing['cents']);
+                $errors = $checked['errors'];
+                if ($errors === []) {
+                    try {
+                        $this->repo->postGiftEntry(
+                            (int) $existing['id'],
+                            (string) $checked['data']['kind'],
+                            $checked['data']['amount_cents'],
+                            (string) $checked['data']['reason'],
+                            $user['id'],
+                            Clock::now()->format('Y-m-d H:i:s'),
+                        );
+                        Flash::set($checked['data']['kind'] === 'void' ? 'Gift voided.' : 'Adjustment recorded.');
+                        redirect_to('/admin/giving/' . $existing['id']);
+                    } catch (\InvalidArgumentException $e) {
+                        $errors['reason'] = $e->getMessage();
+                    }
+                }
             }
         }
         $this->render('giving', $id === 0 ? 'Record a gift' : 'Gift', $user, 'giving', [
             'mode' => 'form',
             'giftId' => $id,
+            'gift' => $existing,
             'form' => $form,
             'errors' => $errors,
-            'funds' => $this->repo->funds(false),
+            'funds' => $this->repo->funds(true),
             'people' => $this->repo->people(),
+            'audit' => $existing === null ? [] : $this->repo->giftAudit((int) $existing['id']),
+            'canAdjust' => $canAdjust,
             'isAdmin' => $user['role'] === 'admin',
         ], $errors === [] ? 200 : 422);
-    }
-
-    /** @param array{id:int, email:string, role:string, name:string} $user */
-    private function deleteGift(array $user, string $method, int $id): void
-    {
-        if ($user['role'] !== 'admin') {
-            $this->forbid($user);
-            return;
-        }
-        $gift = $this->repo->gift($id);
-        if ($gift === null) {
-            $this->missing($user);
-            return;
-        }
-        if ($method === 'POST') {
-            Csrf::verify(Http::input('csrf'));
-            if (Http::input('confirm') !== 'yes') {
-                Flash::set('The gift was kept.', 'error');
-                redirect_to('/admin/giving/' . $id);
-            }
-            $this->repo->deleteGift($id);
-            Flash::set('Gift deleted.');
-            redirect_to('/admin/giving');
-        }
-        $this->render('gift-delete', 'Delete gift', $user, 'giving', ['gift' => $gift]);
     }
 
     /** @param array{id:int, email:string, role:string, name:string} $user */
@@ -393,6 +446,7 @@ final class AdminController
             'error' => $error,
             'ein' => Statements::statementEin((string) $this->config->get('statement.ein', '')),
             'extra' => trim((string) $this->config->get('statement.extra', '')),
+            'issued' => ScheduleFormat::longDate(Clock::now()->format('Y-m-d')),
         ]);
     }
 
@@ -638,11 +692,12 @@ final class AdminController
             'name' => $existing['name'] ?? '',
             'sort_order' => isset($existing['sort_order']) ? (string) $existing['sort_order'] : '60',
             'active' => isset($existing['active']) ? (string) (int) $existing['active'] : '1',
+            'receiving_org' => $existing['receiving_org'] ?? GiftPolicy::CHURCH,
         ];
         $errors = [];
         if ($method === 'POST') {
             Csrf::verify(Http::input('csrf'));
-            $form = $this->posted(['name', 'sort_order', 'active']);
+            $form = $this->posted(['name', 'sort_order', 'active', 'receiving_org']);
             $checked = Rules::fund($form);
             $errors = $checked['errors'];
             if ($errors === []) {
@@ -700,21 +755,29 @@ final class AdminController
             'email' => $existing['email'] ?? '',
             'role' => $existing['role'] ?? 'staff',
             'password' => '',
+            'disabled' => $existing !== null && $existing['disabled_at'] !== null ? '1' : '0',
         ];
         $errors = [];
         if ($method === 'POST') {
             Csrf::verify(Http::input('csrf'));
-            $form = $this->posted(['name', 'email', 'role', 'password']);
+            $form = $this->posted(['name', 'email', 'role', 'password', 'disabled']);
             $checked = Rules::user($form, $id === 0);
             $errors = $checked['errors'];
+            $disabling = ($form['disabled'] ?? '') === '1' && $existing !== null && $existing['disabled_at'] === null;
             if ($existing !== null && !Rules::keepsAnAdmin($this->repo->countAdmins(), (string) $existing['role'], (string) $checked['data']['role'])) {
                 $errors['role'] = 'The church needs at least one administrator.';
+            }
+            if ($disabling && (string) ($existing['role'] ?? '') === 'admin' && (string) $checked['data']['role'] === 'admin' && $this->repo->countAdmins() <= 1) {
+                $errors['disabled'] = 'The church needs at least one administrator.';
             }
             if ($errors === []) {
                 $payload = $checked['data'];
                 $payload['password_hash'] = $payload['password'] === null
                     ? null
                     : password_hash((string) $payload['password'], PASSWORD_DEFAULT);
+                $payload['disabled'] = $id !== 0 && ($form['disabled'] ?? '') === '1';
+                $wasDisabled = $existing !== null && $existing['disabled_at'] !== null;
+                $payload['bump_session'] = $payload['password'] !== null || $wasDisabled !== $payload['disabled'];
                 try {
                     $saved = $this->repo->saveUser($payload, $id === 0 ? null : $id, Clock::now()->format('Y-m-d H:i:s'));
                 } catch (PDOException $e) {
@@ -725,6 +788,12 @@ final class AdminController
                     $saved = 0;
                 }
                 if ($errors === []) {
+                    if ($payload['password'] !== null && !$payload['disabled'] && (int) $user['id'] === $saved) {
+                        $fresh = $this->repo->user($saved);
+                        if ($fresh !== null) {
+                            $_SESSION['session_version'] = (int) $fresh['session_version'];
+                        }
+                    }
                     Flash::set('User saved.');
                     redirect_to('/admin/users/' . $saved);
                 }
@@ -796,7 +865,7 @@ final class AdminController
 
     private function rangeLabel(DateRange $range): string
     {
-        return ScheduleFormat::longDate($range->start) . ' – ' . ScheduleFormat::longDate($range->end);
+        return ScheduleFormat::longDate($range->start) . ' to ' . ScheduleFormat::longDate($range->end);
     }
 
     /** @return list<string> */

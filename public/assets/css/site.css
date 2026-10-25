@@ -105,6 +105,13 @@ a:hover {
 .admin-bar a,
 .hub-band a {
     color: var(--paper);
+    overflow-wrap: anywhere;
+}
+
+.actions a.quiet {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
 }
 
 .site-header .tagline,
@@ -507,6 +514,36 @@ button.danger {
 
     table.stack td.num {
         text-align: left;
+    }
+
+    table.schedule.stack thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+    }
+
+    table.schedule.stack tr {
+        display: block;
+        padding: 0.45rem 0;
+    }
+
+    table.schedule.stack td {
+        display: inline;
+        border: 0;
+        padding: 0;
+    }
+
+    table.schedule.stack td::before {
+        content: none;
+        display: inline;
+    }
+
+    table.schedule.stack td + td::before {
+        content: ", ";
+        color: inherit;
+        font-size: inherit;
     }
 }
 

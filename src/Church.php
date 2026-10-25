@@ -57,22 +57,21 @@ final class Church
         'Prayer & Fasting',
     ];
 
-    public const HUB_NAME = 'The Hub at Olive Branch';
-
-    public const HUB_LEGAL = 'The Hub at Olive Branch Inc.';
-
-    public const HUB_EIN = '41-5032500';
-
-    public const HUB_OPENED = 'around August 2026';
-
-    /** @var list<string> */
-    public const HUB_PARTNERS = [
-        'Georgia Mental Health Consumer Network',
-        'Yellow Elephant',
-        'Hope House',
-    ];
-
-    public const HUB_DRIVE = 'Fill the Tree';
+    /**
+     * The published schedule from schema.sql, used when the database is down.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function publishedServices(): array
+    {
+        return [
+            ['id' => 0, 'name' => 'Sunday School', 'weekday' => 0, 'start_time' => '09:30:00', 'end_time' => null, 'note' => null, 'sort_order' => 10, 'active' => 1, 'weekly' => 1],
+            ['id' => 0, 'name' => 'Worship', 'weekday' => 0, 'start_time' => '11:00:00', 'end_time' => null, 'note' => null, 'sort_order' => 20, 'active' => 1, 'weekly' => 1],
+            ['id' => 0, 'name' => 'Bible Study & Youth', 'weekday' => 4, 'start_time' => '18:30:00', 'end_time' => null, 'note' => null, 'sort_order' => 30, 'active' => 1, 'weekly' => 1],
+            ['id' => 0, 'name' => 'Evening Service', 'weekday' => 0, 'start_time' => '18:00:00', 'end_time' => null, 'note' => 'Fourth Sunday', 'sort_order' => 40, 'active' => 1, 'weekly' => 0],
+            ['id' => 0, 'name' => 'Prayer & Fasting', 'weekday' => 6, 'start_time' => '10:00:00', 'end_time' => '12:00:00', 'note' => null, 'sort_order' => 50, 'active' => 1, 'weekly' => 1],
+        ];
+    }
 
     public static function cityLine(): string
     {

@@ -6,7 +6,7 @@ use Obm\Church;
 use Obm\Money;
 use Obm\ScheduleFormat;
 ?>
-<h1>Giving statement</h1>
+<h1 class="no-print">Giving statement</h1>
 <form class="form-row no-print" method="get" action="/admin/statements" accept-charset="UTF-8">
     <label>
         <span>Person</span>
@@ -36,6 +36,10 @@ use Obm\ScheduleFormat;
         <h2>Contribution statement for <?= e($year) ?></h2>
         <p><?= e($person['first_name'] . ' ' . $person['last_name']) ?></p>
         <p><?= e($rangeLabel) ?></p>
+        <?php if (!empty($issued)): ?><p>Issued <?= e($issued) ?></p><?php endif; ?>
+        <p><?= e(Church::PHONE_DISPLAY) ?><br><?= e(Church::EMAIL) ?></p>
+        <p class="note no-print">This statement includes gifts to funds the church receives. Other funds stay on the ledger and are left off this statement.</p>
+        <div class="table-wrap">
         <table>
             <thead>
                 <tr>
@@ -50,7 +54,7 @@ use Obm\ScheduleFormat;
                     <tr>
                         <td><?= e(ScheduleFormat::longDate($line['date'])) ?></td>
                         <td><?= e($line['fund']) ?></td>
-                        <td><?= e($line['method'] ?? '') ?></td>
+                        <td><?= e($line['method'] === null || $line['method'] === '' ? '' : ucfirst((string) $line['method'])) ?></td>
                         <td class="num"><?= e(Money::format($line['cents'])) ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -62,6 +66,7 @@ use Obm\ScheduleFormat;
                 </tr>
             </tfoot>
         </table>
+        </div>
         <?php foreach ($statement['language'] as $sentence): ?>
             <p><?= e($sentence) ?></p>
         <?php endforeach; ?>

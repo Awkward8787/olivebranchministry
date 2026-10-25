@@ -15,7 +15,7 @@ if (($user['role'] ?? '') === 'admin') {
     $nav['funds'] = ['Funds', '/admin/funds'];
     $nav['users'] = ['Users', '/admin/users'];
 }
-$documentTitle = $title . ' — Admin';
+$documentTitle = $title . ' | Admin';
 ?>
 <!DOCTYPE html>
 <html lang="en">

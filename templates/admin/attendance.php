@@ -30,7 +30,7 @@ if (($mode ?? 'list') === 'list'):
             <tbody>
                 <?php foreach ($weeks as $bucket): ?>
                     <tr>
-                        <td data-label="Week"><?= e(ScheduleFormat::longDate($bucket['start'])) ?> – <?= e(ScheduleFormat::longDate($bucket['end'])) ?></td>
+                        <td data-label="Week"><?= e(ScheduleFormat::longDate($bucket['start'])) ?> to <?= e(ScheduleFormat::longDate($bucket['end'])) ?></td>
                         <td class="num" data-label="Records"><?= (int) $bucket['records'] ?></td>
                         <td class="num" data-label="Total"><?= (int) $bucket['sum'] ?></td>
                         <td class="num" data-label="Average"><?= $bucket['average_display'] === null ? 'No records' : e($bucket['average_display']) ?></td>

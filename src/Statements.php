@@ -18,6 +18,10 @@ final class Statements
 
     public const NO_GOODS = 'No goods or services were provided in exchange for these contributions.';
 
+    public const INTANGIBLE = 'Intangible religious benefits were provided. Those benefits are not usually sold in a commercial transaction.';
+
+    public const INTANGIBLE_BESIDES = 'Other than the goods or services estimated above, intangible religious benefits were provided. Those benefits are not usually sold in a commercial transaction.';
+
     public static function statementEin(?string $configured): ?string
     {
         $configured = trim((string) $configured);
@@ -45,6 +49,9 @@ final class Statements
         foreach ($gifts as $gift) {
             $row = GivingLedger::normalize($gift);
             if ($row['donor_id'] !== $donorId || !$range->contains($row['date'])) {
+                continue;
+            }
+            if ($row['receiving_org'] !== GiftPolicy::CHURCH || $row['cents'] === 0) {
                 continue;
             }
             $lines[] = $row;
@@ -92,21 +99,27 @@ final class Statements
             if ($goods === '') {
                 continue;
             }
-            $noted[] = (string) $line['date'] . ': ' . $goods;
+            if (!array_key_exists('goods_value_cents', $line) || $line['goods_value_cents'] === null) {
+                throw new \InvalidArgumentException('A goods or services note needs a good-faith estimate in cents.');
+            }
+            $value = Money::assertCents($line['goods_value_cents']);
+            $noted[] = ScheduleFormat::longDate((string) $line['date']) . ': ' . $goods . '. Good-faith estimate ' . Money::format($value) . '.';
         }
         if ($noted === []) {
-            return [self::NO_GOODS];
+            return [self::NO_GOODS, self::INTANGIBLE];
         }
         if (count($noted) === count($lines)) {
             return array_merge(
                 ['Goods or services were provided in exchange for these contributions, as noted below.'],
                 $noted,
+                [self::INTANGIBLE_BESIDES],
             );
         }
 
         return array_merge(
             ['No goods or services were provided in exchange for these contributions, except as noted below.'],
             $noted,
+            [self::INTANGIBLE_BESIDES],
         );
     }
 }

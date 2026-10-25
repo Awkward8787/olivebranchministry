@@ -31,7 +31,13 @@ return [
     'mail' => [
         // Inbox for contact and prayer notifications. Mail is not sent when this is empty.
         'notify_to' => '',
+        // From address on this site's own domain. Required before a notification is sent.
+        // Do not use a Gmail address. Leave blank to store the message and skip mail.
         'from' => '',
+    ],
+    'privacy' => [
+        // Handled contact messages and prayer requests are deleted after this many days.
+        'handled_days' => 90,
     ],
     'statement' => [
         // Church EIN only. Leave empty to omit it from year-end statements.

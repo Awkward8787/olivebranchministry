@@ -123,7 +123,7 @@ final class Periods
 
     /**
      * Store a New York wall-clock time. Rejects dates that do not exist,
-     * including the spring-forward gap (02:00–02:59).
+     * including the spring-forward gap (02:00 to 02:59).
      */
     public static function normalizeDateTime(string $value): string
     {

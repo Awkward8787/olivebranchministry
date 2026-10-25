@@ -60,9 +60,9 @@ if (($mode ?? 'list') === 'list'):
                         <td data-label="Date"><a href="/admin/giving/<?= (int) $gift['id'] ?>"><?= e(ScheduleFormat::longDate($gift['date'])) ?></a></td>
                         <td data-label="Person"><?= e($gift['donor_name'] ?? 'Anonymous') ?></td>
                         <td data-label="Fund"><?= e($gift['fund']) ?></td>
-                        <td data-label="Method"><?= e($gift['method']) ?></td>
+                        <td data-label="Method"><?= e(ucfirst((string) $gift['method'])) ?></td>
                         <td data-label="Reference"><?= e($gift['reference'] ?? '') ?></td>
-                        <td class="num" data-label="Amount"><?= e(Money::format($gift['cents'])) ?></td>
+                        <td class="num" data-label="Amount"><?= e(Money::format($gift['cents'])) ?><?php if (!empty($gift['voided'])): ?> voided<?php elseif (isset($gift['original_cents']) && $gift['original_cents'] !== $gift['cents']): ?> net<?php endif; ?></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -75,10 +75,13 @@ if (($mode ?? 'list') === 'list'):
 <?php else:
     $form = $form ?? [];
     $errors = $errors ?? [];
-    $action = ($giftId ?? 0) === 0 ? '/admin/giving/new' : '/admin/giving/' . (int) $giftId;
+    $recording = ($giftId ?? 0) === 0;
+    $action = $recording ? '/admin/giving/new' : '/admin/giving/' . (int) $giftId;
+    $gift = $gift ?? null;
 ?>
-<h1><?= ($giftId ?? 0) === 0 ? 'Record a gift' : 'Gift' ?></h1>
+<h1><?= $recording ? 'Record a gift' : 'Gift' ?></h1>
 <p><a href="/admin/giving">Back to the ledger</a></p>
+<?php if ($recording): ?>
 <form method="post" action="<?= e($action) ?>" accept-charset="UTF-8">
     <?= $csrfField ?>
     <label>
@@ -96,7 +99,7 @@ if (($mode ?? 'list') === 'list'):
         <select name="fund_id" required>
             <option value="">Choose a fund</option>
             <?php foreach ($funds as $fund): ?>
-                <option value="<?= (int) $fund['id'] ?>"<?= selected_if($form['fund_id'] ?? '', (string) $fund['id']) ?>><?= e($fund['name']) ?><?= (int) $fund['active'] === 1 ? '' : ' (inactive)' ?></option>
+                <option value="<?= (int) $fund['id'] ?>"<?= selected_if($form['fund_id'] ?? '', (string) $fund['id']) ?>><?= e($fund['name']) ?></option>
             <?php endforeach; ?>
         </select>
     </label>
@@ -134,11 +137,89 @@ if (($mode ?? 'list') === 'list'):
         <span>Goods or services provided</span>
         <input name="goods_or_services" maxlength="500" value="<?= e($form['goods_or_services'] ?? '') ?>">
     </label>
-    <p class="note">Leave that blank when nothing was provided in return. It is printed on the donor's statement.</p>
+    <p class="note">Leave that blank when nothing was provided in return. A note requires a good-faith estimate. Both are printed on the donor's statement.</p>
     <?php if (isset($errors['goods_or_services'])): ?><p class="error" role="alert"><?= e($errors['goods_or_services']) ?></p><?php endif; ?>
-    <button type="submit">Save gift</button>
+    <label>
+        <span>Good-faith estimate</span>
+        <input name="goods_value" inputmode="decimal" autocomplete="off" value="<?= e($form['goods_value'] ?? '') ?>"<?= isset($errors['goods_value']) ? ' aria-invalid="true" aria-describedby="err-goods"' : '' ?>>
+    </label>
+    <?php if (isset($errors['goods_value'])): ?><p class="error" id="err-goods" role="alert"><?= e($errors['goods_value']) ?></p><?php endif; ?>
+    <button type="submit">Record gift</button>
 </form>
-<?php if (!empty($isAdmin) && ($giftId ?? 0) > 0): ?>
-    <p><a href="/admin/giving/<?= (int) $giftId ?>/delete">Delete this gift</a></p>
+<?php elseif (is_array($gift)): ?>
+    <dl class="facts">
+        <dt>Date</dt><dd><?= e(ScheduleFormat::longDate((string) $gift['date'])) ?></dd>
+        <dt>Person</dt><dd><?= e($gift['donor_name'] ?? 'Anonymous') ?></dd>
+        <dt>Fund</dt><dd><?= e($gift['fund']) ?></dd>
+        <dt>Method</dt><dd><?= e(ucfirst((string) $gift['method'])) ?></dd>
+        <dt>Reference</dt><dd><?= e($gift['reference'] ?? '') ?></dd>
+        <dt>Original amount</dt><dd><?= e(Money::format((int) $gift['original_cents'])) ?></dd>
+        <dt>Net amount</dt><dd><?= e(Money::format((int) $gift['cents'])) ?><?php if (!empty($gift['voided'])): ?> voided<?php endif; ?></dd>
+        <?php if (!empty($gift['note'])): ?><dt>Note</dt><dd><?= e($gift['note']) ?></dd><?php endif; ?>
+        <?php if (!empty($gift['goods_or_services'])): ?>
+            <dt>Goods or services</dt>
+            <dd><?= e($gift['goods_or_services']) ?><?php if ($gift['goods_value_cents'] !== null): ?>. Good-faith estimate <?= e(Money::format((int) $gift['goods_value_cents'])) ?><?php endif; ?></dd>
+        <?php endif; ?>
+    </dl>
+    <h2>Audit log</h2>
+    <?php if (($audit ?? []) === []): ?>
+        <p>No audit rows.</p>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table class="stack">
+                <thead>
+                    <tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action</th><th scope="col">Reason</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($audit as $row): ?>
+                        <tr>
+                            <td data-label="When"><?= e(ScheduleFormat::longDateTime((string) $row['created_at'])) ?></td>
+                            <td data-label="Who"><?= e($row['actor_name'] ?? 'A removed user') ?></td>
+                            <td data-label="Action"><?= e((string) $row['action']) ?></td>
+                            <td data-label="Reason"><?= e((string) $row['reason']) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+    <?php if (!empty($canAdjust)): ?>
+        <h2>Adjustment or void</h2>
+        <form method="post" action="<?= e($action) ?>" accept-charset="UTF-8">
+            <?= $csrfField ?>
+            <label>
+                <span>Entry</span>
+                <select name="kind">
+                    <option value="adjustment"<?= selected_if($form['kind'] ?? '', 'adjustment') ?>>Adjustment</option>
+                    <option value="void"<?= selected_if($form['kind'] ?? '', 'void') ?>>Void</option>
+                </select>
+            </label>
+            <?php if (isset($errors['kind'])): ?><p class="error" role="alert"><?= e($errors['kind']) ?></p><?php endif; ?>
+            <label>
+                <span>Direction</span>
+                <select name="direction">
+                    <option value="decrease"<?= selected_if($form['direction'] ?? '', 'decrease') ?>>Decrease</option>
+                    <option value="increase"<?= selected_if($form['direction'] ?? '', 'increase') ?>>Increase</option>
+                </select>
+            </label>
+            <?php if (isset($errors['direction'])): ?><p class="error" role="alert"><?= e($errors['direction']) ?></p><?php endif; ?>
+            <label>
+                <span>Adjustment amount</span>
+                <input name="amount" inputmode="decimal" autocomplete="off" value="<?= e(($form['kind'] ?? '') === 'void' ? '' : ($form['amount'] ?? '')) ?>"<?= isset($errors['amount']) ? ' aria-invalid="true"' : '' ?>>
+            </label>
+            <p class="note">Leave the amount blank for a void. A void reverses the remaining net.</p>
+            <?php if (isset($errors['amount'])): ?><p class="error" role="alert"><?= e($errors['amount']) ?></p><?php endif; ?>
+            <label>
+                <span>Reason</span>
+                <input name="reason" required maxlength="500" value="<?= e($form['reason'] ?? '') ?>"<?= isset($errors['reason']) ? ' aria-invalid="true"' : '' ?>>
+            </label>
+            <?php if (isset($errors['reason'])): ?><p class="error" role="alert"><?= e($errors['reason']) ?></p><?php endif; ?>
+            <button type="submit">Post entry</button>
+        </form>
+    <?php elseif (!empty($gift['voided'])): ?>
+        <p>This gift is voided.</p>
+    <?php else: ?>
+        <p>An administrator records changes for a closed year.</p>
+    <?php endif; ?>
 <?php endif; ?>
 <?php endif; ?>

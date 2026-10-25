@@ -17,7 +17,7 @@ use Obm\ScheduleFormat;
         <?php foreach ($services as $service): ?>
             <tr>
                 <td data-label="Service"><?= e($service['name']) ?></td>
-                <td data-label="Day"><?= e(ScheduleFormat::weekday((int) $service['weekday'])) ?><?php if (!empty($service['note'])): ?>, <?= e($service['note']) ?><?php endif; ?></td>
+                <td data-label="Day"><?= e(ScheduleFormat::dayLabel((int) $service['weekday'], $service['note'] ?? null)) ?></td>
                 <td data-label="Time"><?= e(ScheduleFormat::clockRange((string) $service['start_time'], $service['end_time'] ?? null)) ?></td>
             </tr>
         <?php endforeach; ?>

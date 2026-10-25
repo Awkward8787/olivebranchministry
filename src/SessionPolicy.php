@@ -28,4 +28,13 @@ final class SessionPolicy
 
         return false;
     }
+
+    public static function stillValid(int $storedVersion, int $sessionVersion, bool $disabled): bool
+    {
+        if ($disabled || $storedVersion < 1 || $sessionVersion < 1) {
+            return false;
+        }
+
+        return $storedVersion === $sessionVersion;
+    }
 }

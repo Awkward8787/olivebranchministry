@@ -40,8 +40,16 @@ final class HtmlCheckTest extends TestCase
         $this->assertStringNotContainsString('Debbie', $pages['leadership']);
         $this->assertStringNotContainsString('Lead Pastor', $pages['leadership']);
         $this->assertStringContainsString('Rooted in Faith, Reaching in Love', $pages['home']);
-        $this->assertStringContainsString('41-5032500', $pages['hub']);
+        $this->assertStringContainsString('The Hub', $pages['hub']);
+        $this->assertStringNotContainsString('41-5032500', $pages['hub']);
+        $this->assertStringNotContainsString('501(c)(3)', $pages['hub']);
+        $this->assertStringNotContainsString('Fill the Tree', $pages['hub']);
+        $this->assertStringNotContainsString('August 2026', $pages['hub']);
+        $this->assertStringNotContainsString('at 1033', $pages['hub']);
+        $this->assertStringNotContainsString('community resource', $pages['hub']);
+        $this->assertStringNotContainsString('around', $pages['hub']);
         $this->assertStringNotContainsString('41-5032500', $pages['statement']);
+        $this->assertStringContainsString('Intangible religious benefits', $pages['statement']);
         $this->assertStringNotContainsString('415032500', $pages['statement']);
         $this->assertStringContainsString('No goods or services were provided in exchange for these contributions.', $pages['statement']);
         $this->assertStringNotContainsString('latitude', $pages['home']);
