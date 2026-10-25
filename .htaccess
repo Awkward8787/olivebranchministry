@@ -1,0 +1,14 @@
+# Safety net when the account document root is this folder instead of public/.
+# Prefer pointing the domain at public/. See the README.
+Options -Indexes
+
+<FilesMatch "^(config\.php|config\.example\.php|schema\.sql|composer\.(json|lock)|phpunit\.xml|README\.md)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(src|templates|bin|tests|docs|vendor|assets)(/|$) - [F,L]
+    RewriteRule ^public/ - [L]
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
