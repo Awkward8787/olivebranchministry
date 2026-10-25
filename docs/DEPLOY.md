@@ -18,7 +18,7 @@ The live database came from the first-release schema. It has the administrator a
 SELECT VERSION();
 ```
 
-Continue only when the result is MariaDB 10.5 or newer. If it says MySQL, stop and do not run `sql/migrate-review.sql`.
+This migration was tested on MariaDB 11.8. Continue only when `VERSION()` reports MariaDB 11.8. If it says MySQL, or a different MariaDB version, stop and do not run `sql/migrate-review.sql`.
 
 2. Back up the database before any change.
 
@@ -50,7 +50,18 @@ WHERE id = 6
   AND goods_value_cents IS NULL;
 ```
 
-Use the real gift id and the church's estimate. `1500` is an example of $15.00, not a value to copy. Repeat the `UPDATE` for every flagged id. Run the pre-flight query again. It must return no rows before you continue.
+Use the real gift id and the church's estimate. `1500` is an example of $15.00, not a value to copy. Repeat the `UPDATE` for every flagged id. The query above still lists a goods note after the estimate is saved. Once `goods_value_cents` exists, run these two checks instead. Both must return no rows before you continue.
+
+```sql
+SELECT id, gifted_on, goods_or_services, amount_cents, goods_value_cents
+FROM gifts
+WHERE goods_or_services IS NOT NULL
+  AND goods_value_cents IS NULL;
+
+SELECT id, gifted_on, amount_cents, goods_value_cents
+FROM gifts
+WHERE goods_value_cents > amount_cents;
+```
 
 5. Run the migration with the mysql client. It is safe to run again. A second run does not add duplicate columns or tables.
 
