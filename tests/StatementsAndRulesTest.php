@@ -1,0 +1,327 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Obm\Tests;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use Obm\FollowUp;
+use Obm\Links;
+use Obm\LoginGuard;
+use Obm\Money;
+use Obm\Periods;
+use Obm\RateWindow;
+use Obm\Rules;
+use Obm\SessionPolicy;
+use Obm\Statements;
+use PHPUnit\Framework\TestCase;
+
+final class StatementsAndRulesTest extends TestCase
+{
+    public function testContributionLanguageDependsOnTheGoodsField(): void
+    {
+        $plain = [[
+            'date' => '2026-01-01',
+            'cents' => 100,
+            'goods_or_services' => null,
+        ]];
+        $this->assertSame([Statements::NO_GOODS], Statements::contributionLanguage($plain));
+
+        $goods = [[
+            'date' => '2026-01-01',
+            'cents' => 100,
+            'goods_or_services' => 'Dinner provided',
+        ]];
+        $language = Statements::contributionLanguage($goods);
+        $this->assertStringStartsWith('Goods or services were provided', $language[0]);
+        $this->assertSame('2026-01-01: Dinner provided', $language[1]);
+        $this->assertNotContains(Statements::NO_GOODS, $language);
+
+        $mixed = [
+            ['date' => '2026-01-01', 'cents' => 100, 'goods_or_services' => null],
+            ['date' => '2026-02-01', 'cents' => 50, 'goods_or_services' => 'A book'],
+        ];
+        $mixedLanguage = Statements::contributionLanguage($mixed);
+        $this->assertStringContainsString('except as noted', $mixedLanguage[0]);
+        $this->assertSame('2026-02-01: A book', $mixedLanguage[1]);
+        $this->assertSame([], Statements::contributionLanguage([]));
+    }
+
+    public function testChurchStatementRefusesTheHubEin(): void
+    {
+        $this->assertNull(Statements::statementEin(''));
+        $this->assertNull(Statements::statementEin('   '));
+        $this->assertNull(Statements::statementEin('41-5032500'));
+        $this->assertNull(Statements::statementEin('415032500'));
+        $this->assertNull(Statements::statementEin('41 5032500'));
+        $this->assertSame('12-3456789', Statements::statementEin('12-3456789'));
+    }
+
+    public function testGiftRulesUseCentsAndRealDates(): void
+    {
+        $ok = Rules::gift([
+            'amount' => '$1.15',
+            'date' => '2024-02-29',
+            'method' => 'check',
+            'reference' => '1008',
+            'fund_id' => '2',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => '',
+        ], [2], [5]);
+        $this->assertSame([], $ok['errors']);
+        $this->assertSame(115, $ok['data']['cents']);
+        $this->assertNull($ok['data']['person_id']);
+
+        $zero = Rules::gift([
+            'amount' => '0',
+            'date' => '2024-12-31',
+            'method' => 'cash',
+            'reference' => '',
+            'fund_id' => '2',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => '',
+        ], [2], []);
+        $this->assertArrayHasKey('amount', $zero['errors']);
+
+        $badDate = Rules::gift([
+            'amount' => '10',
+            'date' => '2023-02-29',
+            'method' => 'cash',
+            'reference' => '',
+            'fund_id' => '2',
+            'person_id' => '5',
+            'note' => '',
+            'goods_or_services' => '',
+        ], [2], [5]);
+        $this->assertArrayHasKey('date', $badDate['errors']);
+
+        $check = Rules::gift([
+            'amount' => '10',
+            'date' => '2026-01-01',
+            'method' => 'check',
+            'reference' => '',
+            'fund_id' => '2',
+            'person_id' => '9',
+            'note' => '',
+            'goods_or_services' => '',
+        ], [2], [5]);
+        $this->assertArrayHasKey('reference', $check['errors']);
+        $this->assertArrayHasKey('person_id', $check['errors']);
+
+        $floaty = Rules::gift([
+            'amount' => '1e2',
+            'date' => '2026-01-01',
+            'method' => 'wire',
+            'reference' => '',
+            'fund_id' => '2',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => '',
+        ], [2], []);
+        $this->assertArrayHasKey('amount', $floaty['errors']);
+        $this->assertArrayHasKey('method', $floaty['errors']);
+    }
+
+    public function testAttendanceCountRejectsFractionsAndAllowsZero(): void
+    {
+        $zero = Rules::attendance([
+            'date' => '2024-02-29',
+            'count' => '0',
+            'label' => 'Worship',
+            'service_id' => '',
+            'notes' => '',
+        ], []);
+        $this->assertSame([], $zero['errors']);
+        $this->assertSame(0, $zero['data']['count']);
+
+        $bad = Rules::attendance([
+            'date' => '2023-02-29',
+            'count' => '10.5',
+            'label' => '',
+            'service_id' => '4',
+            'notes' => '',
+        ], [1]);
+        $this->assertArrayHasKey('date', $bad['errors']);
+        $this->assertArrayHasKey('count', $bad['errors']);
+        $this->assertArrayHasKey('label', $bad['errors']);
+        $this->assertArrayHasKey('service_id', $bad['errors']);
+    }
+
+    public function testFollowUpEdges(): void
+    {
+        $visitor = ['kind' => 'visitor', 'follow_up_status' => 'new', 'follow_up_on' => null];
+        $this->assertTrue(FollowUp::awaiting($visitor, '2026-01-01'));
+        $this->assertTrue(FollowUp::awaiting([
+            'kind' => 'visitor',
+            'follow_up_status' => 'new',
+            'follow_up_on' => '2026-06-01',
+        ], '2026-01-01'));
+        $this->assertFalse(FollowUp::awaiting([
+            'kind' => 'visitor',
+            'follow_up_status' => 'contacted',
+            'follow_up_on' => null,
+        ], '2026-01-01'));
+        $this->assertTrue(FollowUp::awaiting([
+            'kind' => 'visitor',
+            'follow_up_status' => 'contacted',
+            'follow_up_on' => '2026-01-01',
+        ], '2026-01-01'));
+        $this->assertTrue(FollowUp::awaiting([
+            'kind' => 'visitor',
+            'follow_up_status' => 'contacted',
+            'follow_up_on' => '2025-12-31',
+        ], '2026-01-01'));
+        $this->assertFalse(FollowUp::awaiting([
+            'kind' => 'visitor',
+            'follow_up_status' => 'contacted',
+            'follow_up_on' => '2026-01-01',
+        ], '2025-12-31'));
+        $this->assertFalse(FollowUp::awaiting([
+            'kind' => 'member',
+            'follow_up_status' => 'new',
+            'follow_up_on' => null,
+        ], '2026-01-01'));
+    }
+
+    public function testServiceEndAndEventGap(): void
+    {
+        $service = Rules::service([
+            'name' => 'Prayer & Fasting',
+            'weekday' => '6',
+            'start_time' => '10:00',
+            'end_time' => '12:00',
+            'note' => '',
+            'sort_order' => '50',
+            'active' => '1',
+            'weekly' => '1',
+        ]);
+        $this->assertSame([], $service['errors']);
+        $this->assertSame('10:00:00', $service['data']['start_time']);
+        $this->assertSame('12:00:00', $service['data']['end_time']);
+
+        $backwards = Rules::service([
+            'name' => 'Worship',
+            'weekday' => '0',
+            'start_time' => '11:00',
+            'end_time' => '11:00',
+            'note' => '',
+            'sort_order' => '1',
+            'active' => '1',
+            'weekly' => '1',
+        ]);
+        $this->assertArrayHasKey('end_time', $backwards['errors']);
+
+        $gap = Rules::event([
+            'title' => 'Study',
+            'summary' => 'A study.',
+            'starts_at' => '2026-03-08T02:30',
+            'ends_at' => '',
+            'location' => '',
+            'published' => '1',
+        ]);
+        $this->assertArrayHasKey('starts_at', $gap['errors']);
+
+        $ok = Rules::event([
+            'title' => 'Study',
+            'summary' => 'A study.',
+            'starts_at' => '2026-10-25T18:30',
+            'ends_at' => '2026-10-25T19:30',
+            'location' => '',
+            'published' => '0',
+        ]);
+        $this->assertSame([], $ok['errors']);
+        $this->assertSame('2026-10-25 18:30:00', $ok['data']['starts_at']);
+        $this->assertSame(0, $ok['data']['published']);
+    }
+
+    public function testLoginWindowCrossesTheNewYearAndSessionLimitsAreExact(): void
+    {
+        $now = new DateTimeImmutable('2026-01-01 00:10:00', new DateTimeZone('America/New_York'));
+        $this->assertSame('2025-12-31 23:55:00', LoginGuard::windowStart($now));
+        $this->assertFalse(LoginGuard::blocked(7));
+        $this->assertTrue(LoginGuard::blocked(8));
+
+        $issued = 1_000_000;
+        $this->assertFalse(SessionPolicy::expired($issued, $issued, $issued + SessionPolicy::IDLE_SECONDS - 1));
+        $this->assertTrue(SessionPolicy::expired($issued, $issued, $issued + SessionPolicy::IDLE_SECONDS));
+        $this->assertTrue(SessionPolicy::expired($issued + 10, $issued, $issued + SessionPolicy::ABSOLUTE_SECONDS));
+        $this->assertTrue(SessionPolicy::expired($issued + 5, $issued, $issued));
+    }
+
+    public function testRateWindowAllowsFiveAndResetsOnTheHourAcrossNewYear(): void
+    {
+        $start = new DateTimeImmutable('2025-12-31 23:30:00', new DateTimeZone('America/New_York'));
+        $state = RateWindow::next(null, null, $start);
+        $this->assertSame(1, $state['hits']);
+        $this->assertFalse($state['blocked']);
+        for ($i = 2; $i <= 5; $i++) {
+            $state = RateWindow::next($state['hits'], $state['window_start'], $start);
+            $this->assertSame($i, $state['hits']);
+            $this->assertFalse($state['blocked']);
+        }
+        $blocked = RateWindow::next($state['hits'], $state['window_start'], $start);
+        $this->assertSame(6, $blocked['hits']);
+        $this->assertTrue($blocked['blocked']);
+
+        $almost = new DateTimeImmutable('2026-01-01 00:29:59', new DateTimeZone('America/New_York'));
+        $still = RateWindow::next(5, '2025-12-31 23:30:00', $almost);
+        $this->assertTrue($still['blocked']);
+        $resetAt = new DateTimeImmutable('2026-01-01 00:30:00', new DateTimeZone('America/New_York'));
+        $reset = RateWindow::next(6, '2025-12-31 23:30:00', $resetAt);
+        $this->assertFalse($reset['blocked']);
+        $this->assertSame(1, $reset['hits']);
+        $this->assertSame('2026-01-01 00:30:00', $reset['window_start']);
+
+        $contact = RateWindow::formBucket('contact', '203.0.113.10');
+        $prayer = RateWindow::formBucket('prayer', '203.0.113.10');
+        $this->assertSame(64, strlen($contact));
+        $this->assertNotSame($contact, $prayer);
+        $this->assertSame($contact, RateWindow::formBucket('contact', '203.0.113.10'));
+        $this->assertDoesNotMatchRegularExpression('/203\.0\.113\.10/', $contact);
+    }
+
+    public function testGivingLinkMustBeHttps(): void
+    {
+        $this->assertNull(Links::httpsUrl(''));
+        $this->assertNull(Links::httpsUrl('http://give.example.org/x'));
+        $this->assertNull(Links::httpsUrl('javascript:alert(1)'));
+        $this->assertNull(Links::httpsUrl('https://evil.example/"onclick'));
+        $this->assertSame('https://give.example.org/olive', Links::httpsUrl('https://give.example.org/olive'));
+        $this->assertNull(Links::safeHost("evil.example\r\n"));
+        $this->assertSame('localhost:8080', Links::safeHost('localhost:8080'));
+    }
+
+    public function testPasswordLengthAndLastAdmin(): void
+    {
+        $short = Rules::user([
+            'name' => 'Ada',
+            'email' => 'ada@example.org',
+            'role' => 'staff',
+            'password' => 'short-pass',
+        ], true);
+        $this->assertArrayHasKey('password', $short['errors']);
+        $this->assertFalse(Rules::keepsAnAdmin(1, 'admin', 'staff'));
+        $this->assertTrue(Rules::keepsAnAdmin(2, 'admin', 'staff'));
+        $this->assertTrue(Rules::keepsAnAdmin(1, 'staff', 'staff'));
+    }
+
+    public function testParsedCheckGiftCentsMatchTheStoredInteger(): void
+    {
+        $result = Rules::gift([
+            'amount' => '$1,000.10',
+            'date' => '2024-12-31',
+            'method' => 'check',
+            'reference' => '42',
+            'fund_id' => '1',
+            'person_id' => '3',
+            'note' => 'envelope',
+            'goods_or_services' => '',
+        ], [1], [3]);
+        $this->assertSame([], $result['errors']);
+        $this->assertSame(100010, $result['data']['cents']);
+        $this->assertSame('$1,000.10', Money::format($result['data']['cents']));
+    }
+}

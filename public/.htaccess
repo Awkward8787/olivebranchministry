@@ -1,0 +1,18 @@
+Options -Indexes
+DirectoryIndex index.php
+AddType image/avif .avif
+AddType image/webp .webp
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|jpg|jpeg|webp|avif)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+    RewriteRule ^ index.php [L]
+</IfModule>

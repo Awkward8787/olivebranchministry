@@ -1,0 +1,20 @@
+{
+    "name": "olive-branch/website",
+    "description": "Public website and church admin for Olive Branch Ministries Inc.",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Obm\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Obm\\Tests\\": "tests/"
+        }
+    }
+}
