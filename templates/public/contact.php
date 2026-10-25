@@ -16,7 +16,7 @@ $errorKind = $errorKind ?? '';
         <?= e(Church::cityLine()) ?>
     </address>
     <p><a href="tel:<?= e(Church::PHONE_TEL) ?>"><?= e(Church::PHONE_DISPLAY) ?></a></p>
-    <p><a href="mailto:<?= e(Church::EMAIL) ?>"><?= e(Church::EMAIL) ?></a></p>
+    <p class="contact-email"><a href="mailto:<?= e(Church::EMAIL) ?>"><?= e(Church::EMAIL) ?></a></p>
 
     <h2>Write to the church</h2>
     <form method="post" action="/contact" accept-charset="UTF-8" novalidate>

@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Obm\Church;
 use Obm\Http;
 
-$documentTitle = ($page ?? '') === 'home' ? (string) $title : $title . ' — ' . Church::NAME;
+$documentTitle = ($page ?? '') === 'home' ? (string) $title : $title . ' | ' . Church::NAME;
 $nav = [
     'home' => ['Home', '/'],
     'about' => ['About', '/about'],

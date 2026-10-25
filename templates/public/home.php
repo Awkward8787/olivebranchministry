@@ -11,10 +11,10 @@ include dirname(__DIR__) . '/partials/banner.php';
         <h2>Mission</h2>
         <blockquote class="mission"><?= e(Church::MISSION) ?></blockquote>
         <p class="actions">
-            <a href="/plan-your-visit">Plan your visit</a>
-            <a href="/give">Give</a>
-            <a href="/the-hub">The Hub</a>
-            <a href="/contact">Contact</a>
+            <a class="button" href="/plan-your-visit">Plan your visit</a>
+            <a class="quiet" href="/give">Give</a>
+            <a class="quiet" href="/the-hub">The Hub</a>
+            <a class="quiet" href="/contact">Contact</a>
         </p>
     </section>
     <section>

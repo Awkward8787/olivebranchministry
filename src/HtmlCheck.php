@@ -14,6 +14,8 @@ use DOMXPath;
  */
 final class HtmlCheck
 {
+    public const ADDRESS_PATTERN = '/1601|\b(2nd|second)\s+av/i';
+
     /** @return list<string> */
     public static function problems(string $html): array
     {
@@ -87,7 +89,7 @@ final class HtmlCheck
         if (stripos($text, 'lorem ipsum') !== false) {
             $problems[] = 'Placeholder text is present.';
         }
-        if (preg_match('/1601|2nd Ave/i', $text) === 1) {
+        if (preg_match(self::ADDRESS_PATTERN, $text) === 1) {
             $problems[] = 'Unconfirmed address appeared.';
         }
 
@@ -119,7 +121,7 @@ final class HtmlCheck
             if (stripos($contents, 'lorem ipsum') !== false) {
                 $problems[] = $relative . ' contains placeholder text.';
             }
-            if (preg_match('/1601|2nd Ave/i', $contents) === 1 && $relative !== 'docs/CHURCH-TODO.md') {
+            if (preg_match(self::ADDRESS_PATTERN, $contents) === 1 && $relative !== 'docs/CHURCH-TODO.md') {
                 $problems[] = $relative . ' mentions the unconfirmed address.';
             }
             if (str_contains($contents, '41-5032500') || str_contains($contents, '415032500')) {

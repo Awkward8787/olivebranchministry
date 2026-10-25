@@ -17,6 +17,7 @@ use Obm\DateRange;
 use Obm\GivingLedger;
 use Obm\Money;
 use Obm\Periods;
+use Obm\Statements;
 
 $config = Config::load(dirname(__DIR__) . '/config.php');
 if ((string) $config->get('app.env', '') === 'production') {
@@ -33,6 +34,12 @@ $now = Clock::now()->format('Y-m-d H:i:s');
 $yesterday = Clock::now()->modify('-1 day')->format('Y-m-d');
 
 $pdo->beginTransaction();
+$pdo->prepare(
+    "DELETE a FROM gift_adjustments a INNER JOIN gifts g ON g.id = a.gift_id WHERE g.note LIKE 'DEMO:%'",
+)->execute();
+$pdo->prepare(
+    "DELETE a FROM gift_audit a INNER JOIN gifts g ON g.id = a.gift_id WHERE g.note LIKE 'DEMO:%'",
+)->execute();
 $pdo->prepare("DELETE FROM gifts WHERE note LIKE 'DEMO:%'")->execute();
 $pdo->prepare("DELETE FROM attendance WHERE notes LIKE 'DEMO:%'")->execute();
 $pdo->prepare("DELETE FROM contact_messages WHERE message LIKE 'DEMO:%'")->execute();
@@ -67,10 +74,18 @@ foreach ($people as $person) {
     $ids[$person[0] . ' ' . $person[1]] = (int) $pdo->lastInsertId();
 }
 
-$fundRows = $pdo->query('SELECT id, name FROM funds')->fetchAll();
+$fundRows = $pdo->query('SELECT id, name, code FROM funds')->fetchAll();
 $funds = [];
+$hubId = null;
 foreach ($fundRows as $row) {
     $funds[(string) $row['name']] = (int) $row['id'];
+    if ((string) ($row['code'] ?? '') === 'hub') {
+        $hubId = (int) $row['id'];
+    }
+}
+if ($hubId === null) {
+    fwrite(STDERR, "The Hub fund (code hub) is missing.\n");
+    exit(1);
 }
 $serviceRows = $pdo->query('SELECT id, name FROM service_times')->fetchAll();
 $services = [];
@@ -79,30 +94,32 @@ foreach ($serviceRows as $row) {
 }
 
 $insertGift = $pdo->prepare(
-    'INSERT INTO gifts (person_id, fund_id, amount_cents, gifted_on, method, reference, note, goods_or_services, recorded_by, created_at)
-     VALUES (:person, :fund, :cents, :date, :method, :reference, :note, :goods, NULL, :created)',
+    'INSERT INTO gifts (person_id, fund_id, amount_cents, gifted_on, method, reference, note, goods_or_services, goods_value_cents, recorded_by, created_at)
+     VALUES (:person, :fund, :cents, :date, :method, :reference, :note, :goods, :goods_value, NULL, :created)',
 );
+$mealEstimate = Money::parseCents('15.00');
 $gifts = [
-    ['Demo Donor', 'Tithes', '500.00', '2026-01-01', 'check', '1001', 'DEMO: January tithe', null],
-    ['Demo Donor', 'Offering', '40.25', '2026-02-28', 'cash', null, 'DEMO: February offering', null],
-    ['Demo Donor', 'General', '150.00', '2026-10-04', 'cash', null, 'DEMO: October general', null],
-    ['Demo Donor', 'The Hub', '75.10', '2026-10-18', 'check', '1002', 'DEMO: October hub', null],
-    [null, 'General', '25.00', '2026-10-11', 'cash', null, 'DEMO: anonymous general', null],
-    ['Sample Member', 'Building', '100.00', '2026-10-20', 'check', '1003', 'DEMO: building gift with a meal', 'meal'],
-    ['Demo Donor', 'Tithes', '300.00', '2025-12-31', 'check', '1004', 'DEMO: prior year tithe', null],
-    ['Demo Donor', 'General', '50.00', '2027-01-01', 'cash', null, 'DEMO: next year general', null],
-    ['Demo Donor', 'Tithes', '18.00', '2024-02-29', 'cash', null, 'DEMO: leap day tithe', null],
+    ['Demo Donor', 'Tithes', '500.00', '2026-01-01', 'check', '1001', 'DEMO: January tithe', null, null],
+    ['Demo Donor', 'Offering', '40.25', '2026-02-28', 'cash', null, 'DEMO: February offering', null, null],
+    ['Demo Donor', 'General', '150.00', '2026-10-04', 'cash', null, 'DEMO: October general', null, null],
+    ['Demo Donor', 'hub', '75.10', '2026-10-18', 'check', '1002', 'DEMO: October hub', null, null],
+    [null, 'General', '25.00', '2026-10-11', 'cash', null, 'DEMO: anonymous general', null, null],
+    ['Sample Member', 'Building', '100.00', '2026-10-20', 'check', '1003', 'DEMO: meal good-faith estimate 15.00', 'meal', $mealEstimate],
+    ['Demo Donor', 'Tithes', '300.00', '2025-12-31', 'check', '1004', 'DEMO: prior year tithe', null, null],
+    ['Demo Donor', 'General', '50.00', '2027-01-01', 'cash', null, 'DEMO: next year general', null, null],
+    ['Demo Donor', 'Tithes', '18.00', '2024-02-29', 'cash', null, 'DEMO: leap day tithe', null, null],
 ];
 foreach ($gifts as $gift) {
     $insertGift->execute([
         ':person' => $gift[0] === null ? null : $ids[$gift[0]],
-        ':fund' => $funds[$gift[1]],
+        ':fund' => $gift[1] === 'hub' ? $hubId : $funds[$gift[1]],
         ':cents' => (string) Money::parseCents($gift[2]),
         ':date' => $gift[3],
         ':method' => $gift[4],
         ':reference' => $gift[5],
         ':note' => $gift[6],
         ':goods' => $gift[7],
+        ':goods_value' => $gift[8] === null ? null : (string) $gift[8],
         ':created' => $now,
     ]);
 }
@@ -153,7 +170,8 @@ $pdo->commit();
 
 $ledger = [];
 $rows = $pdo->query(
-    'SELECT g.id, g.person_id, g.amount_cents, g.gifted_on, f.name AS fund, g.goods_or_services
+    'SELECT g.id, g.person_id, g.amount_cents, g.gifted_on, f.name AS fund, f.receiving_org,
+            g.goods_or_services, g.goods_value_cents
      FROM gifts g INNER JOIN funds f ON f.id = g.fund_id WHERE g.note LIKE \'DEMO:%\'',
 )->fetchAll();
 foreach ($rows as $row) {
@@ -163,18 +181,25 @@ foreach ($rows as $row) {
         'cents' => Money::fromDatabase($row['amount_cents']),
         'date' => (string) $row['gifted_on'],
         'donor_id' => $row['person_id'] === null ? null : (int) $row['person_id'],
+        'receiving_org' => (string) $row['receiving_org'],
+        'goods_or_services' => $row['goods_or_services'] !== null ? (string) $row['goods_or_services'] : null,
+        'goods_value_cents' => $row['goods_value_cents'] === null ? null : Money::fromDatabase($row['goods_value_cents']),
     ];
 }
 $year = GivingLedger::reconcile($ledger, new DateRange('2026-01-01', '2026-12-31'));
 $october = GivingLedger::reconcile($ledger, Periods::month(2026, 10));
 $donor = GivingLedger::donorTotal($ledger, $ids['Demo Donor'], Periods::year(2026));
+$statement = Statements::forDonor($ledger, $ids['Demo Donor'], Periods::year(2026));
+$octoberStatement = Statements::forDonor($ledger, $ids['Demo Donor'], Periods::month(2026, 10));
 $attendance = AttendanceStats::summarize(array_column($counts, 2));
 $expect = [
     '2026 ledger' => [89035, $year['total']],
     '2026 funds' => [89035, $year['fund_total']],
     '2026 named plus anonymous' => [89035, $year['donor_statement_total'] + $year['anonymous_total']],
-    'October 2026' => [35010, $october['total']],
-    'Demo Donor 2026' => [76535, $donor],
+    'October 2026 ledger' => [35010, $october['total']],
+    'Demo Donor 2026 ledger' => [76535, $donor],
+    'Demo Donor 2026 church statement' => [69025, $statement['total_cents']],
+    'Demo Donor October 2026 church statement' => [15000, $octoberStatement['total_cents']],
     'attendance average' => ['29.3', $attendance['average_display']],
 ];
 $failed = false;

@@ -63,6 +63,21 @@ final class Money
         throw new InvalidArgumentException('Invalid cents from the database.');
     }
 
+    public static function fromSignedDatabase(mixed $value): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+        if (!is_string($value) || preg_match('/^-?\d+$/', $value) !== 1) {
+            throw new InvalidArgumentException('Invalid cents from the database.');
+        }
+        $negative = str_starts_with($value, '-');
+        $digits = $negative ? substr($value, 1) : $value;
+        $amount = self::fromDatabase($digits === '' ? '0' : $digits);
+
+        return $negative ? -$amount : $amount;
+    }
+
     /**
      * @param list<int> $amounts
      */

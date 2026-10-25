@@ -161,7 +161,10 @@ final class PeriodsTest extends TestCase
         $this->assertSame('9:30 AM', ScheduleFormat::clock('09:30:00'));
         $this->assertSame('6:30 PM', ScheduleFormat::clock('18:30:00'));
         $this->assertSame('11:05 PM', ScheduleFormat::clock('23:05:00'));
-        $this->assertSame('10:00 AM–12:00 PM', ScheduleFormat::clockRange('10:00:00', '12:00:00'));
+        $this->assertSame('10:00 AM to 12:00 PM', ScheduleFormat::clockRange('10:00:00', '12:00:00'));
+        $this->assertSame('Fourth Sunday', ScheduleFormat::dayLabel(0, 'Fourth Sunday'));
+        $this->assertSame('Sunday', ScheduleFormat::dayLabel(0, null));
+        $this->assertSame('Sunday, weekly', ScheduleFormat::dayLabel(0, 'weekly'));
         $this->assertSame('Sunday, October 25, 2026, 11:00 AM', ScheduleFormat::longDateTime('2026-10-25 11:00:00'));
         $this->assertSame('February 29, 2024', ScheduleFormat::longDate('2024-02-29'));
     }

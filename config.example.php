@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Copy this file to config.php. config.php is not committed.
- * Do not put The Hub's EIN in statement.ein. That organization is separate.
+ * Do not put the Hub EIN in statement.ein.
  */
 return [
     'db' => [
@@ -31,7 +31,15 @@ return [
     'mail' => [
         // Inbox for contact and prayer notifications. Mail is not sent when this is empty.
         'notify_to' => '',
+        // From address on this site's own domain. Required before a notification is sent.
+        // Do not use a Gmail address. Leave blank to store the message and skip mail.
         'from' => '',
+    ],
+    'privacy' => [
+        // Leave handled_days unset. Handled inbox rows are kept.
+        // Set a positive whole number of days only after the church chooses one.
+        // The purge runs when someone opens /admin/inbox.
+        // 'handled_days' => 90,
     ],
     'statement' => [
         // Church EIN only. Leave empty to omit it from year-end statements.

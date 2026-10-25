@@ -64,7 +64,7 @@ flowchart LR
     rows[Gift rows in cents]
     ledger[Ledger total]
     funds[Sum of fund totals]
-    named[Sum of named statements]
+    named[Sum of named gifts]
     anon[Anonymous gifts]
     rows --> ledger
     rows --> funds
@@ -80,9 +80,9 @@ For any inclusive date range:
 
 - the sum of per-fund totals
 - the ledger total
-- the sum of named donors' statement totals plus anonymous gifts
+- the sum of named gifts plus anonymous gifts
 
-are the same number. Anonymous gifts stay in the ledger and in their fund. They are not printed on a person's statement. If every gift names a donor, the statement totals equal the ledger. The office refuses to show a report if that identity fails.
+are the same number. Anonymous gifts stay in the ledger and in their fund. They are not printed on a person's statement. A church statement includes only funds whose receiving organization is the church. The fund with code `hub` is unconfirmed. In a database created from the first schema that fund is id 4. A renamed display name does not put those gifts back on the church statement. They stay on the ledger. The office refuses to show a ledger if the identity fails.
 
 ## Money, dates, and attendance
 
@@ -105,7 +105,7 @@ Create an empty database, put its name, user, and password only in `config.php`,
 
 ```bash
 mysql -u olive_branch -p olive_branch < schema.sql
-ADMIN_EMAIL='you@example.com' ADMIN_PASSWORD='a long passphrase' php bin/seed-admin.php
+read -rs ADMIN_PASSWORD && export ADMIN_PASSWORD && ADMIN_EMAIL='you@example.com' php bin/seed-admin.php; unset ADMIN_PASSWORD
 php -S 127.0.0.1:8080 -t public bin/php-server-router.php
 ```
 
@@ -154,18 +154,35 @@ home/
 6. From the Hostinger terminal, in the directory that contains `bin/`:
 
 ```bash
-ADMIN_EMAIL='office@example.com' ADMIN_PASSWORD='a long passphrase' php bin/seed-admin.php
+read -rs ADMIN_PASSWORD && export ADMIN_PASSWORD && ADMIN_EMAIL='office@example.com' php bin/seed-admin.php; unset ADMIN_PASSWORD
 ```
 
-   The password is an environment variable, not a committed file and not a script argument. Use 12 to 72 characters. Remove it from shell history after it succeeds. Do not run `bin/seed-demo.php` on the public database.
+   The password is an environment variable, not a committed file and not a script argument. `read -rs` keeps it out of shell history. Use 12 to 72 characters. Running the command again prints `Account exists; nothing changed` and does not reset the password or change the role. `--reset-password` resets the password and ends that account's other sessions. `--make-admin` sets the role to administrator and does not change the password unless `--reset-password` is also present. Do not run `bin/seed-demo.php` on the public database.
+
 7. Open `/` and `/admin/login`. Sign in, then change nothing in `schema.sql` on later deploys. Importing it again into a live database will fail because the tables already exist, which is intentional.
+
+### Upgrade a database from the first release
+
+Do this before uploading the new code. The new code reads columns the first-release database does not have. The old code still runs after the SQL. The full procedure is in [docs/DEPLOY.md](docs/DEPLOY.md).
+
+1. Back up the live database.
+2. Run the pre-flight query. If it returns any row, stop.
+   `SELECT id, gifted_on, goods_or_services FROM gifts WHERE goods_or_services IS NOT NULL;`
+3. Run `sql/migrate-review.sql` with the mysql client. It is safe to run again. A non-zero exit stops the upgrade.
+4. Confirm fund id 4 has `code` `hub` and `receiving_org` `unconfirmed`, and that `chk_goods_value` and `chk_receiving_org` exist.
+5. Leave `privacy.handled_days` unset unless the church has chosen a retention period.
+6. Upload the new code only after the SQL exits 0. Do not import `schema.sql` into this database.
 
 `config.php` is gitignored. The root `.htaccess` denies `src/`, `templates/`, `bin/`, `tests/`, `docs/`, and `config.php` if the document root is ever pointed at the project folder instead of `public/`.
 
 ## Office notes
 
-Staff and administrators share the inbox, directory, giving ledger, attendance, events, and service times. Prayer requests are visible only after sign-in. Administrators also manage funds and users. The last administrator cannot be demoted. Gift deletion is limited to administrators and asks for confirmation. There is no email password reset.
+Staff and administrators share the inbox, directory, giving ledger, attendance, events, and service times. Prayer requests are visible only after sign-in. The notification email says a request is waiting and links to the inbox. It does not include the request. Handled messages and prayer requests are kept until `privacy.handled_days` is set to a positive number of days. When it is set, opening `/admin/inbox` deletes handled rows older than that. Deleting an inbox row asks for confirmation before it is removed. The inbox pages older rows instead of stopping at 200. Administrators also manage funds and users. Changing who receives a fund requires a reason and is written to the fund audit. The last administrator cannot be demoted or disabled. A password change ends that account's other sessions. There is no email password reset.
 
-Year-end statements are printable HTML. Use the browser's print dialog and choose Save as PDF. The church name and address are printed. The goods-or-services sentence says nothing was provided unless a gift says otherwise. A church EIN is printed only when `statement.ein` is set to a value other than The Hub's EIN.
+Recorded gifts are append-only. Staff and administrators post a void or an adjustment with a reason. The audit log stores who, when, and why. A year stays open to staff through January 31 of the next year. After that, only an administrator can record a new gift, a void, or an adjustment in that year. New gifts use active funds. The ledger and the statement use the net of the original amount, adjustments, and voids.
+
+Year-end statements are printable HTML. Use the browser's print dialog and choose Save as PDF. The church name, address, phone, and email are printed, with the issue date. A goods or services note requires a good-faith estimate in cents, and that estimate cannot be more than the gift. The statement prints the estimate. When no gift records goods or services, the statement says: "No goods or services were provided other than intangible religious benefits." A church EIN is printed only when `statement.ein` is set to a value other than the Hub EIN. Set `mail.from` to an address on the site's own domain before notifications are sent. Leave it blank to skip mail. Do not use the church Gmail address as `From`.
+
+Set `expose_php` to `Off` in the host PHP settings. The application removes `X-Powered-By` on each response. `Strict-Transport-Security` is sent when the request is HTTPS.
 
 What the church still needs to confirm is listed in [docs/CHURCH-TODO.md](docs/CHURCH-TODO.md).

@@ -12,7 +12,7 @@ use Obm\ScheduleFormat;
         <?php foreach ($events as $event): ?>
             <article>
                 <h2><?= e($event['title']) ?></h2>
-                <p><?= e(ScheduleFormat::longDateTime((string) $event['starts_at'])) ?><?php if (!empty($event['ends_at'])): ?> – <?= e(ScheduleFormat::longDateTime((string) $event['ends_at'])) ?><?php endif; ?></p>
+                <p><?= e(ScheduleFormat::longDateTime((string) $event['starts_at'])) ?><?php if (!empty($event['ends_at'])): ?> to <?= e(ScheduleFormat::longDateTime((string) $event['ends_at'])) ?><?php endif; ?></p>
                 <?php if (!empty($event['location'])): ?>
                     <p><?= e($event['location']) ?></p>
                 <?php endif; ?>

@@ -52,7 +52,7 @@ final class FixturePages
         $pages['dashboard'] = View::adminHtml('dashboard', array_merge($adminBase, [
             'title' => 'Dashboard',
             'section' => 'dashboard',
-            'monthLabel' => 'October 1, 2026 – October 31, 2026',
+            'monthLabel' => 'October 1, 2026 to October 31, 2026',
             'report' => [
                 'by_fund' => ['General' => 17500, 'The Hub' => 7510, 'Building' => 10000, 'Tithes' => 0, 'Offering' => 0],
                 'total' => 35010,
@@ -78,7 +78,7 @@ final class FixturePages
             'from' => '',
             'to' => '',
             'rangeError' => null,
-            'rangeLabel' => 'October 1, 2026 – October 31, 2026',
+            'rangeLabel' => 'October 1, 2026 to October 31, 2026',
             'report' => [
                 'by_fund' => ['General' => 17500, 'Tithes' => 0, 'Offering' => 0, 'The Hub' => 7510, 'Building' => 10000],
                 'total' => 35010,
@@ -107,7 +107,8 @@ final class FixturePages
             ],
             'person' => ['id' => 1, 'first_name' => 'Demo', 'last_name' => 'Donor'],
             'year' => '2026',
-            'rangeLabel' => 'January 1, 2026 – December 31, 2026',
+            'rangeLabel' => 'January 1, 2026 to December 31, 2026',
+            'issued' => 'October 25, 2026',
             'error' => null,
             'ein' => null,
             'extra' => '',

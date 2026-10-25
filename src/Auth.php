@@ -38,6 +38,14 @@ final class Auth
 
             return null;
         }
+        $disabled = $row['disabled_at'] !== null;
+        $storedVersion = (int) ($row['session_version'] ?? 0);
+        $sessionVersion = (int) ($_SESSION['session_version'] ?? 0);
+        if (!SessionPolicy::stillValid($storedVersion, $sessionVersion, $disabled)) {
+            $this->logout();
+
+            return null;
+        }
         $_SESSION['seen'] = $now;
 
         return [
@@ -67,16 +75,17 @@ final class Auth
         if ($email === '' || $password === '' || strlen($password) > 72 || str_contains($password, "\0")) {
             return 'invalid';
         }
-        $failures = $this->repo->recentFailures($email, $ip, LoginGuard::windowStart($now));
-        if (LoginGuard::blocked($failures)) {
+        $counts = $this->repo->recentFailureCounts($email, $ip, LoginGuard::windowStart($now));
+        if (LoginGuard::locked($counts['pair'], $counts['ip'])) {
             password_verify($password, $this->dummyHash());
 
             return 'throttled';
         }
         $user = $this->repo->userByEmail($email);
         $hash = is_array($user) ? (string) $user['password_hash'] : $this->dummyHash();
-        $ok = is_array($user) && password_verify($password, $hash);
-        if (!is_array($user)) {
+        $disabled = is_array($user) && $user['disabled_at'] !== null;
+        $ok = is_array($user) && !$disabled && password_verify($password, $hash);
+        if (!is_array($user) || $disabled) {
             password_verify($password, $hash);
         }
         $stamp = $now->format('Y-m-d H:i:s');
@@ -86,6 +95,7 @@ final class Auth
         }
         session_regenerate_id(true);
         $_SESSION['uid'] = (int) $user['id'];
+        $_SESSION['session_version'] = (int) $user['session_version'];
         $_SESSION['issued'] = $now->getTimestamp();
         $_SESSION['seen'] = $now->getTimestamp();
         Csrf::rotate();

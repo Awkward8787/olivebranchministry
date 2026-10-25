@@ -7,16 +7,19 @@ namespace Obm;
 /**
  * Year-end contribution statements.
  *
- * The goods-or-services sentence is the standard acknowledgment:
- * no goods or services were provided, unless a gift records that field.
- * The church EIN is printed only when configured, and The Hub's EIN is refused
- * even if it is pasted into church config. The Hub is a separate organization.
+ * When no gift records goods or services, the acknowledgment is the
+ * single sentence from IRS Publication 1771. A gift that records goods
+ * or services also needs a good-faith estimate. The church EIN is printed
+ * only when configured, and the Hub EIN is refused even if it is pasted
+ * into church config.
  */
 final class Statements
 {
     public const HUB_EIN_DIGITS = '415032500';
 
-    public const NO_GOODS = 'No goods or services were provided in exchange for these contributions.';
+    public const NO_GOODS = 'No goods or services were provided other than intangible religious benefits.';
+
+    public const INTANGIBLE_BESIDES = 'Other than the goods or services estimated above, intangible religious benefits were provided. Those benefits are not usually sold in a commercial transaction.';
 
     public static function statementEin(?string $configured): ?string
     {
@@ -45,6 +48,9 @@ final class Statements
         foreach ($gifts as $gift) {
             $row = GivingLedger::normalize($gift);
             if ($row['donor_id'] !== $donorId || !$range->contains($row['date'])) {
+                continue;
+            }
+            if ($row['receiving_org'] !== GiftPolicy::CHURCH || $row['cents'] === 0) {
                 continue;
             }
             $lines[] = $row;
@@ -92,7 +98,12 @@ final class Statements
             if ($goods === '') {
                 continue;
             }
-            $noted[] = (string) $line['date'] . ': ' . $goods;
+            if (!array_key_exists('goods_value_cents', $line) || $line['goods_value_cents'] === null) {
+                $giftId = $line['id'] ?? null;
+                throw new GoodsEstimateMissing(is_int($giftId) ? $giftId : null);
+            }
+            $value = Money::assertCents($line['goods_value_cents']);
+            $noted[] = ScheduleFormat::longDate((string) $line['date']) . ': ' . $goods . '. Good-faith estimate ' . Money::format($value) . '.';
         }
         if ($noted === []) {
             return [self::NO_GOODS];
@@ -101,12 +112,14 @@ final class Statements
             return array_merge(
                 ['Goods or services were provided in exchange for these contributions, as noted below.'],
                 $noted,
+                [self::INTANGIBLE_BESIDES],
             );
         }
 
         return array_merge(
             ['No goods or services were provided in exchange for these contributions, except as noted below.'],
             $noted,
+            [self::INTANGIBLE_BESIDES],
         );
     }
 }

@@ -7,11 +7,16 @@ namespace Obm\Tests;
 use DateTimeImmutable;
 use DateTimeZone;
 use Obm\FollowUp;
+use Obm\GiftPolicy;
+use Obm\GoodsEstimateMissing;
+use Obm\HtmlCheck;
 use Obm\Links;
 use Obm\LoginGuard;
+use Obm\Mailer;
 use Obm\Money;
 use Obm\Periods;
 use Obm\RateWindow;
+use Obm\Retention;
 use Obm\Rules;
 use Obm\SessionPolicy;
 use Obm\Statements;
@@ -27,25 +32,49 @@ final class StatementsAndRulesTest extends TestCase
             'goods_or_services' => null,
         ]];
         $this->assertSame([Statements::NO_GOODS], Statements::contributionLanguage($plain));
+        $this->assertSame(
+            'No goods or services were provided other than intangible religious benefits.',
+            Statements::NO_GOODS,
+        );
 
         $goods = [[
             'date' => '2026-01-01',
             'cents' => 100,
             'goods_or_services' => 'Dinner provided',
+            'goods_value_cents' => 2500,
         ]];
         $language = Statements::contributionLanguage($goods);
         $this->assertStringStartsWith('Goods or services were provided', $language[0]);
-        $this->assertSame('2026-01-01: Dinner provided', $language[1]);
+        $this->assertSame('January 1, 2026: Dinner provided. Good-faith estimate $25.00.', $language[1]);
+        $this->assertSame(Statements::INTANGIBLE_BESIDES, $language[2]);
         $this->assertNotContains(Statements::NO_GOODS, $language);
 
         $mixed = [
             ['date' => '2026-01-01', 'cents' => 100, 'goods_or_services' => null],
-            ['date' => '2026-02-01', 'cents' => 50, 'goods_or_services' => 'A book'],
+            ['date' => '2026-02-01', 'cents' => 50, 'goods_or_services' => 'A book', 'goods_value_cents' => 500],
         ];
         $mixedLanguage = Statements::contributionLanguage($mixed);
         $this->assertStringContainsString('except as noted', $mixedLanguage[0]);
-        $this->assertSame('2026-02-01: A book', $mixedLanguage[1]);
+        $this->assertSame('February 1, 2026: A book. Good-faith estimate $5.00.', $mixedLanguage[1]);
+        $this->assertSame(Statements::INTANGIBLE_BESIDES, $mixedLanguage[2]);
         $this->assertSame([], Statements::contributionLanguage([]));
+    }
+
+    public function testAGoodsNoteWithoutAnEstimateNamesTheGift(): void
+    {
+        try {
+            Statements::contributionLanguage([[
+                'id' => 6,
+                'date' => '2026-10-20',
+                'cents' => 10000,
+                'goods_or_services' => 'meal',
+                'goods_value_cents' => null,
+            ]]);
+            $this->fail('A missing estimate should not use the year error.');
+        } catch (GoodsEstimateMissing $e) {
+            $this->assertSame(6, $e->giftId);
+            $this->assertSame('Gift #6 has a goods note but no good-faith estimate.', $e->getMessage());
+        }
     }
 
     public function testChurchStatementRefusesTheHubEin(): void
@@ -243,6 +272,13 @@ final class StatementsAndRulesTest extends TestCase
         $this->assertSame('2025-12-31 23:55:00', LoginGuard::windowStart($now));
         $this->assertFalse(LoginGuard::blocked(7));
         $this->assertTrue(LoginGuard::blocked(8));
+        $this->assertFalse(LoginGuard::locked(0, 8));
+        $this->assertTrue(LoginGuard::locked(8, 0));
+        $this->assertFalse(LoginGuard::locked(7, 39));
+        $this->assertTrue(LoginGuard::locked(0, 40));
+        $this->assertFalse(SessionPolicy::stillValid(2, 1, false));
+        $this->assertFalse(SessionPolicy::stillValid(1, 1, true));
+        $this->assertTrue(SessionPolicy::stillValid(1, 1, false));
 
         $issued = 1_000_000;
         $this->assertFalse(SessionPolicy::expired($issued, $issued, $issued + SessionPolicy::IDLE_SECONDS - 1));
@@ -323,5 +359,140 @@ final class StatementsAndRulesTest extends TestCase
         $this->assertSame([], $result['errors']);
         $this->assertSame(100010, $result['data']['cents']);
         $this->assertSame('$1,000.10', Money::format($result['data']['cents']));
+    }
+
+    public function testGoodsNoteRequiresACentsEstimateAndAReasonIsRequiredToVoid(): void
+    {
+        $missing = Rules::gift([
+            'amount' => '10.00',
+            'date' => '2026-10-20',
+            'method' => 'check',
+            'reference' => '1003',
+            'fund_id' => '1',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => 'meal',
+            'goods_value' => '',
+        ], [1], []);
+        $this->assertArrayHasKey('goods_value', $missing['errors']);
+
+        $estimate = Rules::gift([
+            'amount' => '100.00',
+            'date' => '2026-10-20',
+            'method' => 'check',
+            'reference' => '1003',
+            'fund_id' => '1',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => 'meal',
+            'goods_value' => '15.00',
+        ], [1], []);
+        $this->assertSame([], $estimate['errors']);
+        $this->assertSame(1500, $estimate['data']['goods_value_cents']);
+
+        $capped = Rules::gift([
+            'amount' => '10.00',
+            'date' => '2026-10-20',
+            'method' => 'check',
+            'reference' => '1003',
+            'fund_id' => '1',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => 'meal',
+            'goods_value' => '10.00',
+        ], [1], []);
+        $this->assertSame([], $capped['errors']);
+        $this->assertSame(1000, $capped['data']['goods_value_cents']);
+
+        $over = Rules::gift([
+            'amount' => '10.00',
+            'date' => '2026-10-20',
+            'method' => 'check',
+            'reference' => '1003',
+            'fund_id' => '1',
+            'person_id' => '',
+            'note' => '',
+            'goods_or_services' => 'meal',
+            'goods_value' => '500.00',
+        ], [1], []);
+        $this->assertSame('The good-faith estimate cannot be more than the gift.', $over['errors']['goods_value']);
+        $this->assertNull($over['data']['goods_value_cents']);
+
+        $blank = Rules::giftEntry(['kind' => 'void', 'reason' => '', 'amount' => '', 'direction' => ''], 50000);
+        $this->assertArrayHasKey('reason', $blank['errors']);
+        $void = Rules::giftEntry(['kind' => 'void', 'reason' => 'Bounced check', 'amount' => '', 'direction' => ''], 50000);
+        $this->assertSame([], $void['errors']);
+        $this->assertSame(-50000, $void['data']['amount_cents']);
+    }
+
+    public function testPrayerMailIsANoticeAndHandledRowsExpireAfterNinetyDays(): void
+    {
+        $notice = Mailer::prayerNotice('https://example.org/admin/inbox');
+        $this->assertStringContainsString('A new prayer request is waiting.', $notice);
+        $this->assertStringContainsString('/admin/inbox', $notice);
+        $this->assertStringNotContainsString('please heal', $notice);
+        $this->assertFalse(Mailer::acceptableFrom('', 'example.org'));
+        $this->assertFalse(Mailer::acceptableFrom('office@gmail.com', 'example.org'));
+        $this->assertTrue(Mailer::acceptableFrom('office@example.org', 'www.example.org'));
+        $this->assertTrue(Mailer::acceptableFrom('office@example.org', '127.0.0.1'));
+        $now = new DateTimeImmutable('2026-04-01 12:00:00', new DateTimeZone('America/New_York'));
+        $this->assertNull(Retention::handledDays(null));
+        $this->assertNull(Retention::handledDays(''));
+        $this->assertNull(Retention::handledDays(0));
+        $this->assertNull(Retention::handledDays('90 days'));
+        $this->assertSame(90, Retention::handledDays(90));
+        $this->assertSame(90, Retention::handledDays('90'));
+        $this->assertSame('2026-01-01 12:00:00', Retention::cutoff($now, 90));
+    }
+
+    public function testReceivingOrgChangeRequiresAReasonAndTheHubIsNotMatchedByName(): void
+    {
+        $changed = Rules::fund([
+            'name' => 'Community fund',
+            'sort_order' => '40',
+            'active' => '1',
+            'receiving_org' => 'church',
+            'reason' => '',
+        ], 'unconfirmed');
+        $this->assertArrayHasKey('reason', $changed['errors']);
+
+        $kept = Rules::fund([
+            'name' => 'Community fund',
+            'sort_order' => '40',
+            'active' => '1',
+            'receiving_org' => 'church',
+            'reason' => 'The church confirmed this fund',
+        ], 'unconfirmed');
+        $this->assertSame([], $kept['errors']);
+        $this->assertSame('church', $kept['data']['receiving_org']);
+
+        $same = Rules::fund([
+            'name' => 'General',
+            'sort_order' => '10',
+            'active' => '1',
+            'receiving_org' => 'church',
+            'reason' => '',
+        ], 'church');
+        $this->assertSame([], $same['errors']);
+
+        $migration = (string) file_get_contents(dirname(__DIR__) . '/sql/migrate-review.sql');
+        $schema = (string) file_get_contents(dirname(__DIR__) . '/schema.sql');
+        $this->assertStringContainsString(
+            "SET code = '" . GiftPolicy::HUB_CODE . "' WHERE id = " . GiftPolicy::HUB_SEED_ID,
+            $migration,
+        );
+        $this->assertDoesNotMatchRegularExpression("/name\\s*=\\s*'The Hub'/", $migration);
+        $this->assertStringContainsString('ADD COLUMN IF NOT EXISTS', $migration);
+        $this->assertStringContainsString('CREATE TABLE IF NOT EXISTS', $migration);
+        $this->assertStringContainsString('ADD CONSTRAINT IF NOT EXISTS chk_goods_value', $migration);
+        $this->assertStringContainsString('ADD CONSTRAINT IF NOT EXISTS chk_receiving_org', $migration);
+        $this->assertStringContainsString("('The Hub', 40, 1, 'unconfirmed', 'hub')", $schema);
+    }
+
+    public function testAddressGuardCatchesAvenueSpellings(): void
+    {
+        $this->assertSame(1, preg_match(HtmlCheck::ADDRESS_PATTERN, '16' . '01 ' . 'Second' . ' Ave'));
+        $this->assertSame(1, preg_match(HtmlCheck::ADDRESS_PATTERN, '2' . 'nd' . "  " . 'Av'));
+        $this->assertSame(0, preg_match(HtmlCheck::ADDRESS_PATTERN, '1033 1st Street SE'));
     }
 }
